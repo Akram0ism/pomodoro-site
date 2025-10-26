@@ -336,6 +336,33 @@
         color: var(--accent);
         font-weight: 700;
       }
+
+      /* Toast (уведомление) */
+      .toast {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        background: #121a33;
+        color: #e7ecf3;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        padding: 10px 14px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        transform: translateY(12px);
+        opacity: 0;
+        pointer-events: none;
+        transition: transform 0.25s ease, opacity 0.25s ease;
+        z-index: 9999;
+      }
+      .toast.show {
+        transform: translateY(0);
+        opacity: 1;
+      }
+      .toast .ok {
+        margin-right: 8px;
+        color: #22c55e;
+        font-weight: 700;
+      }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -561,6 +588,26 @@
             el.innerHTML = DEFAULT_INFO_HTML;
           }
         }
+
+        // toast уведомление
+        function ensureToastEl() {
+          let el = document.getElementById('toast');
+          if (!el) {
+            el = document.createElement('div');
+            el.id = 'toast';
+            el.className = 'toast';
+            document.body.appendChild(el);
+          }
+          return el;
+        }
+        function showToast(message) {
+          const el = ensureToastEl();
+          el.innerHTML = `<span class="ok">✔</span>${message}`;
+          el.classList.add('show');
+          clearTimeout(showToast._t);
+          showToast._t = setTimeout(() => el.classList.remove('show'), 2200);
+        }
+
         // ===== Topbar Auth UI =====
         const authIcon = document.getElementById('authIcon');
         const authMenu = document.getElementById('authMenu');
@@ -1135,31 +1182,31 @@
         };
 
         resetStatsBtn.onclick = () => {
-          if (confirm('Сбросить статистику?')) {
-            const d = nowISO();
-            state.stats = {
-              todayDate: d,
-              todayFocusMin: 0,
-              setsDone: 0,
-              totalFocusMin: 0,
+          // без confirm — сразу сбрасываем
+          const d = nowISO();
+          state.stats = {
+            todayDate: d,
+            todayFocusMin: 0,
+            setsDone: 0,
+            totalFocusMin: 0,
+            history: {},
+            todayByHour: Array.from({ length: 24 }, () => 0),
+            project: {},
+          };
+          state.projects.forEach((p) => {
+            state.stats.project[p.id] = {
+              total: 0,
               history: {},
               todayByHour: Array.from({ length: 24 }, () => 0),
-              project: {},
             };
-            state.projects.forEach(
-              (p) =>
-                (state.stats.project[p.id] = {
-                  total: 0,
-                  history: {},
-                  todayByHour: Array.from({ length: 24 }, () => 0),
-                })
-            );
-            save();
-            renderKPIs();
-            renderChart();
-          }
-        };
+          });
+          save();
+          renderKPIs();
+          renderChart();
 
+          // красивое уведомление
+          showToast('Статистика сброшена');
+        };
         addTask.onclick = addTaskFromInput;
         taskText.onkeydown = (e) => {
           if (e.key === 'Enter') {

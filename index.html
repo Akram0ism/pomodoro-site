@@ -274,7 +274,6 @@
         max-height: 260px;
       }
     </style>
-    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
@@ -461,12 +460,34 @@
       (() => {
         // ===== Cloud (Supabase) config
         const SUPABASE_URL = 'https://xilejbksbuexrncvtunb.supabase.co'; // <= замени
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpbGVqYmtzYnVleHJuY3Z0dW5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0NjMxNDcsImV4cCI6MjA3NzAzOTE0N30.sF9ffDQYpxXSqbqlCNkklSoC0ZTzqO3pskOZ9AyHKsY'; // <= замени
+        const SUPABASE_ANON_KEY =
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpbGVqYmtzYnVleHJuY3Z0dW5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0NjMxNDcsImV4cCI6MjA3NzAzOTE0N30.sF9ffDQYpxXSqbqlCNkklSoC0ZTzqO3pskOZ9AyHKsY'; // <= замени
         const supa =
           SUPABASE_URL.startsWith('https://') &&
           !SUPABASE_ANON_KEY.includes('YOUR_')
             ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
             : null;
+        // ===== Восстановление сессии после магической ссылки =====
+        if (location.hash.includes('access_token')) {
+          const params = new URLSearchParams(location.hash.slice(1));
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+          supa.auth.getUser().then(({ data }) => {
+            const user = data?.user;
+            user ? onSignedIn(user) : onSignedOut();
+          });
+
+          supa.auth.onAuthStateChange((_evt, session) => {
+            const user = session?.user;
+            user ? onSignedIn(user) : onSignedOut();
+          });
+
+          // Устанавливаем сессию вручную
+          supa.auth.setSession({ access_token, refresh_token }).then(() => {
+            // очищаем hash из URL
+            history.replaceState({}, document.title, location.pathname);
+          });
+        }
 
         // ===== Helpers
         const $ = (sel) => document.querySelector(sel);
@@ -1184,14 +1205,12 @@
           }
           const current = rows?.[0]?.minutes || 0;
           const total = current + minutes;
-          const { error: upErr } = await supa
-            .from('stats_by_day')
-            .upsert({
-              user_id: u.id,
-              project_id: projectId || null,
-              day,
-              minutes: total,
-            });
+          const { error: upErr } = await supa.from('stats_by_day').upsert({
+            user_id: u.id,
+            project_id: projectId || null,
+            day,
+            minutes: total,
+          });
           if (upErr) console.warn(upErr);
         }
 

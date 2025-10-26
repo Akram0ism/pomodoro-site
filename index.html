@@ -4,20 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Помодоро таймер</title>
-    <header id="topbar">
-    <div class="logo">Помодоро</div>
-    <div id="authIcon" class="auth-icon" title="Войти"></div>
-    <div id="authMenu" class="auth-menu hidden">
-      <div class="muted" id="authEmailDisplay" style="margin-bottom:6px">Не вошли</div>
-      <div class="auth-row">
-        <input id="authMenuEmail" type="email" placeholder="you@example.com" />
-        <button id="authLoginBtn">Войти</button>
-      </div>
-      <button id="authLogoutBtn" class="full" style="display:none">Выйти</button>
-    </div>
-     
-    </div>
-  </header>
+
     <meta name="theme-color" content="#0f172a" />
     <style>
       #topbar {
@@ -354,6 +341,26 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   </head>
   <body>
+    <header id="topbar">
+      <div class="logo">Помодоро</div>
+      <div id="authIcon" class="auth-icon" title="Войти"></div>
+      <div id="authMenu" class="auth-menu hidden">
+        <div class="muted" id="authEmailDisplay" style="margin-bottom: 6px">
+          Не вошли
+        </div>
+        <div class="auth-row">
+          <input
+            id="authMenuEmail"
+            type="email"
+            placeholder="you@example.com"
+          />
+          <button id="authLoginBtn">Войти</button>
+        </div>
+        <button id="authLogoutBtn" class="full" style="display: none">
+          Выйти
+        </button>
+      </div>
+    </header>
     <div class="container">
       <div class="card p24">
         <h1>Помодоро таймер</h1>
@@ -537,12 +544,30 @@
         const $ = (sel) => document.querySelector(sel);
         const $$ = (sel) => Array.from(document.querySelectorAll(sel));
         const fmt = (s) => String(Math.floor(s)).padStart(2, '0');
+        // ===== Welcome banner (персональное приветствие)
+        const DEFAULT_INFO_HTML =
+          'Простая система для фокуса: 25/5, длинный перерыв каждые 4 сета. ' +
+          'Горячие клавиши: <b>Space</b> — старт/пауза, <b>R</b> — сброс, <b>1</b>/<b>2</b>/<b>3</b> — режимы.';
+
+        function updateWelcome(user) {
+          const el = document.getElementById('welcomeText');
+          if (!el) return;
+          if (user) {
+            const name =
+              (user.user_metadata && user.user_metadata.name) ||
+              (user.email ? user.email.split('@')[0] : 'пользователь');
+            el.innerHTML = `👋 Здравствуйте, <b>${name}</b>!`;
+          } else {
+            el.innerHTML = DEFAULT_INFO_HTML;
+          }
+        }
         // ===== Topbar Auth UI =====
         const authIcon = document.getElementById('authIcon');
         const authMenu = document.getElementById('authMenu');
         const authEmailDisplay = document.getElementById('authEmailDisplay');
         const authLoginBtn = document.getElementById('authLoginBtn');
         const authLogoutBtn = document.getElementById('authLogoutBtn');
+        const authMenuEmail = document.getElementById('authMenuEmail');
 
         authIcon.textContent = '👤'; // default
 
@@ -551,15 +576,29 @@
         };
 
         authLoginBtn.onclick = async () => {
-          const email = prompt('Введите email для входа:');
-          if (!email) return;
+          const email = (authMenuEmail?.value || '').trim();
+          if (!email) {
+            authMenuEmail?.focus();
+            return;
+          }
+
           const { error } = await supa.auth.signInWithOtp({
             email,
             options: { emailRedirectTo: location.origin + location.pathname },
           });
-          if (error) alert(error.message);
-          else alert('Проверь почту!');
+
+          if (error) {
+            alert(error.message);
+          } else {
+            alert('Проверь почту!');
+            authMenu?.classList.add('hidden'); // спрятать меню
+          }
         };
+
+        // запуск по Enter
+        authMenuEmail?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') authLoginBtn.click();
+        });
 
         authLogoutBtn.onclick = async () => {
           await supa.auth.signOut();
@@ -573,6 +612,7 @@
             authEmailDisplay.textContent = user.email;
             authLoginBtn.style.display = 'none';
             authLogoutBtn.style.display = 'block';
+            authMenuEmail && (authMenuEmail.style.display = 'none');
           } else {
             authIcon.textContent = '👤';
             authEmailDisplay.textContent = 'Не вошли';
@@ -714,10 +754,8 @@
         const chartCanvas = document.getElementById('focusChart');
         const chartProjectSel = document.getElementById('chartProject');
         // Auth UI
-        const authEmail = document.getElementById('authEmail');
         const btnLogin = document.getElementById('btnLogin');
         const btnLogout = document.getElementById('btnLogout');
-        const authStatus = document.getElementById('authStatus');
 
         // ===== Modes
         const MODES = [
@@ -1043,27 +1081,36 @@
           renderProjectsUI();
           renderChart();
         }
-        function deleteProject(id){
-  if(id==='default') return
-  const row = document.querySelector(`[data-id="${id}"]`)?.closest('.row')
-  if(row){
-    row.style.transition = 'opacity .3s'
-    row.style.opacity = 0
-    setTimeout(()=>{
-      state.projects = state.projects.filter(p=>p.id!==id)
-      delete state.stats.project[id]
-      if(state.activeProjectId===id) state.activeProjectId='default'
-      if(chartProjectSel && chartProjectSel.value===id) chartProjectSel.value='__all__'
-      save(); renderProjectsUI(); renderChart()
-    }, 300)
-  } else {
-    state.projects = state.projects.filter(p=>p.id!==id)
-    delete state.stats.project[id]
-    if(state.activeProjectId===id) state.activeProjectId='default'
-    if(chartProjectSel && chartProjectSel.value===id) chartProjectSel.value='__all__'
-    save(); renderProjectsUI(); renderChart()
-  }
-}
+        function deleteProject(id) {
+          if (id === 'default') return;
+          const row = document
+            .querySelector(`[data-id="${id}"]`)
+            ?.closest('.row');
+          if (row) {
+            row.style.transition = 'opacity .3s';
+            row.style.opacity = 0;
+            setTimeout(() => {
+              state.projects = state.projects.filter((p) => p.id !== id);
+              delete state.stats.project[id];
+              if (state.activeProjectId === id)
+                state.activeProjectId = 'default';
+              if (chartProjectSel && chartProjectSel.value === id)
+                chartProjectSel.value = '__all__';
+              save();
+              renderProjectsUI();
+              renderChart();
+            }, 300);
+          } else {
+            state.projects = state.projects.filter((p) => p.id !== id);
+            delete state.stats.project[id];
+            if (state.activeProjectId === id) state.activeProjectId = 'default';
+            if (chartProjectSel && chartProjectSel.value === id)
+              chartProjectSel.value = '__all__';
+            save();
+            renderProjectsUI();
+            renderChart();
+          }
+        }
 
         saveSettingsBtn.onclick = () => {
           const f = Math.max(1, +focusMins.value | 0),

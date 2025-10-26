@@ -340,16 +340,19 @@
       canvas {
         max-height: 260px;
       }
+      #welcomeText b {
+        color: var(--accent);
+        font-weight: 700;
+      }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-
   </head>
   <body>
     <div class="container">
       <div class="card p24">
         <h1>Помодоро таймер</h1>
-        <div class="muted">
+        <div class="muted" id="welcomeText">
           Простая система для фокуса: 25/5, длинный перерыв каждые 4 сета.
           Горячие клавиши: <b>Space</b> — старт/пауза, <b>R</b> — сброс,
           <b>1</b>/<b>2</b>/<b>3</b> — режимы.
@@ -446,7 +449,13 @@
               ></div>
             </div>
 
-         
+            <hr
+              style="
+                border: none;
+                border-top: 1px solid rgba(255, 255, 255, 0.08);
+                margin: 14px 0;
+              "
+            />
 
             <h3 class="panel-title" style="margin-top: 18px">Статистика</h3>
             <div class="stats">
@@ -1174,6 +1183,12 @@
         }
 
         async function onSignedIn(user) {
+          updateAuthUI(user);
+          const welcome = document.getElementById('welcomeText');
+          if (welcome) {
+            const name = user.user_metadata?.name || user.email.split('@')[0];
+            welcome.innerHTML = `👋 Здравствуйте, <b>${name}</b>!`;
+          }
           setAuthUI(user);
           try {
             const [projects, stats] = await Promise.all([
@@ -1230,6 +1245,14 @@
         }
         function onSignedOut() {
           setAuthUI(null);
+          function onSignedOut() {
+            updateAuthUI(null);
+            const welcome = document.getElementById('welcomeText');
+            if (welcome) {
+              welcome.innerHTML =
+                'Простая система для фокуса: 25/5, длинный перерыв каждые 4 сета. Горячие клавиши: <b>Space</b> — старт/пауза, <b>R</b> — сброс, <b>1</b>/<b>2</b>/<b>3</b> — режимы.';
+            }
+          }
         }
 
         if (supa) {

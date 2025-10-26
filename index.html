@@ -1038,19 +1038,27 @@
           renderProjectsUI();
           renderChart();
         }
-        function deleteProject(id) {
-          if (id === 'default') return;
-          if (!confirm('Удалить проект и его статистику?')) return;
-          state.projects = state.projects.filter((p) => p.id !== id);
-          delete state.stats.project[id];
-          if (state.activeProjectId === id) state.activeProjectId = 'default';
-          if (chartProjectSel && chartProjectSel.value === id)
-            chartProjectSel.value = '__all__';
-          save();
-          renderProjectsUI();
-          renderChart();
-          deleteProjectFromCloud(id).catch(() => {});
-        }
+        function deleteProject(id){
+  if(id==='default') return
+  const row = document.querySelector(`[data-id="${id}"]`)?.closest('.row')
+  if(row){
+    row.style.transition = 'opacity .3s'
+    row.style.opacity = 0
+    setTimeout(()=>{
+      state.projects = state.projects.filter(p=>p.id!==id)
+      delete state.stats.project[id]
+      if(state.activeProjectId===id) state.activeProjectId='default'
+      if(chartProjectSel && chartProjectSel.value===id) chartProjectSel.value='__all__'
+      save(); renderProjectsUI(); renderChart()
+    }, 300)
+  } else {
+    state.projects = state.projects.filter(p=>p.id!==id)
+    delete state.stats.project[id]
+    if(state.activeProjectId===id) state.activeProjectId='default'
+    if(chartProjectSel && chartProjectSel.value===id) chartProjectSel.value='__all__'
+    save(); renderProjectsUI(); renderChart()
+  }
+}
 
         saveSettingsBtn.onclick = () => {
           const f = Math.max(1, +focusMins.value | 0),

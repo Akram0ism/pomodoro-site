@@ -5,14 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Помодоро таймер</title>
     <header id="topbar">
-      <div class="logo">Помодоро</div>
-      <div id="authIcon" class="auth-icon" title="Войти"></div>
-      <div id="authMenu" class="auth-menu hidden">
-        <div id="authEmailDisplay">Не вошли</div>
+    <div class="logo">Помодоро</div>
+    <div id="authIcon" class="auth-icon" title="Войти"></div>
+    <div id="authMenu" class="auth-menu hidden">
+      <div class="muted" id="authEmailDisplay" style="margin-bottom:6px">Не вошли</div>
+      <div class="auth-row">
+        <input id="authMenuEmail" type="email" placeholder="you@example.com" />
         <button id="authLoginBtn">Войти</button>
-        <button id="authLogoutBtn">Выйти</button>
       </div>
-    </header>
+      <button id="authLogoutBtn" class="full" style="display:none">Выйти</button>
+    </div>
+     
+    </div>
+  </header>
     <meta name="theme-color" content="#0f172a" />
     <style>
       #topbar {

@@ -565,6 +565,14 @@
       </div>
     </div>
 
+    <div id="miniWidget" class="widget">
+      <div id="widgetHeader">
+        <span id="widgetStatus">Фокус</span>
+        <button id="widgetToggle">⏸️</button>
+      </div>
+      <div id="widgetTime">25:00</div>
+    </div>
+
     <script>
       (() => {
         // ===== Cloud (Supabase) config
@@ -879,6 +887,7 @@
           startBtn.textContent = 'Старт';
           statusEl.textContent = manual ? 'Режим переключён' : 'Готов';
           renderTime();
+          updateWidget();
           save();
         }
 
@@ -904,16 +913,19 @@
         }
 
         function start() {
+          getAC(); // гарантируем разблокировку
           state.running = true;
           startBtn.textContent = 'Пауза';
           statusEl.textContent = 'Идёт…';
           save();
+          updateWidget();
         }
         function pause() {
           state.running = false;
           startBtn.textContent = 'Старт';
           statusEl.textContent = 'Пауза';
           save();
+          updateWidget();
         }
 
         function onTimerEnd() {
@@ -972,23 +984,66 @@
             () => {}
           );
         }
+        // ===== Audio unlock & shared context
+        let __ac; // shared AudioContext
+        function getAC() {
+          if (!__ac) {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            __ac = new Ctx();
+          }
+          if (__ac.state === 'suspended') {
+            // resume возвращает промис — необязательно await
+            __ac.resume().catch(() => {});
+          }
+          return __ac;
+        }
+
+        // Разблокировать на первом пользовательском жесте
+        function unlockAudioOnce() {
+          try {
+            getAC();
+          } catch (e) {}
+          document.removeEventListener('click', unlockAudioOnce);
+          document.removeEventListener('keydown', unlockAudioOnce);
+          document.removeEventListener('touchstart', unlockAudioOnce, {
+            passive: true,
+          });
+        }
+        document.addEventListener('click', unlockAudioOnce);
+        document.addEventListener('keydown', unlockAudioOnce);
+        document.addEventListener('touchstart', unlockAudioOnce, {
+          passive: true,
+        });
 
         // ===== Notifications & Sound (simple beep)
         function beep() {
           try {
-            const ac = new (window.AudioContext || window.webkitAudioContext)();
+            const ac = getAC();
             const o = ac.createOscillator();
             const g = ac.createGain();
             o.type = 'sine';
             o.frequency.setValueAtTime(660, ac.currentTime);
-            g.gain.setValueAtTime(0.001, ac.currentTime);
+
+            // тихий старт -> короткий «пик»
+            g.gain.setValueAtTime(0.0001, ac.currentTime);
             o.connect(g).connect(ac.destination);
-            g.gain.exponentialRampToValueAtTime(0.2, ac.currentTime + 0.02);
-            g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.6);
+            g.gain.exponentialRampToValueAtTime(0.25, ac.currentTime + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.5);
+
             o.start();
-            o.stop(ac.currentTime + 0.6);
-          } catch (e) {}
+            o.stop(ac.currentTime + 0.55);
+          } catch (e) {
+            // Фолбэк через HTMLAudio (если вдруг WebAudio запрещён)
+            try {
+              // очень короткий «пик» в data URI (22050 Hz, 8-bit PCM — условно)
+              const a = new Audio(
+                'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAACABAAZGF0YQgAAAAAAP8A/wD/AAAA/wD/AP8AAAD/AAAA'
+              );
+              a.play().catch(() => {});
+            } catch (_) {}
+          }
         }
+
         function notify(title, body) {
           if (!state.settings.notifyOn) return;
           if (Notification.permission === 'granted')
@@ -1010,7 +1065,9 @@
         function renderTime() {
           const s = Math.ceil(state.remaining);
           timeEl.textContent = `${fmt(s / 60)}:${fmt(s % 60)}`;
+          updateWidget(); // 🔄 обновляем виджет при каждом тике
         }
+
         function renderKPIs() {
           kpiToday.textContent = `${state.stats.todayFocusMin} мин`;
           kpiSets.textContent = state.stats.setsDone;
@@ -1571,68 +1628,62 @@
             console.warn('Self-tests failed', err);
           }
         })();
+        // ===== Мини-виджет Pomodoro =====
+        const widget = document.getElementById('miniWidget');
+        const widgetTime = document.getElementById('widgetTime');
+        const widgetStatus = document.getElementById('widgetStatus');
+        const widgetToggle = document.getElementById('widgetToggle');
+
+        function updateWidget() {
+          if (!widget) return;
+          const s = Math.ceil(state.remaining);
+          const min = String(Math.floor(s / 60)).padStart(2, '0');
+          const sec = String(s % 60).padStart(2, '0');
+          widgetTime.textContent = `${min}:${sec}`;
+          widgetStatus.textContent =
+            state.mode === 'focus'
+              ? 'Фокус'
+              : state.mode === 'short'
+              ? 'Перерыв'
+              : 'Длинный';
+          widgetToggle.textContent = state.running ? '⏸️' : '▶️';
+        }
+
+        widgetToggle.onclick = () => {
+          state.running ? pause() : start();
+          updateWidget();
+        };
+
+        // возможность перетаскивать
+        (function enableDrag(el) {
+          let isDragging = false,
+            offsetX = 0,
+            offsetY = 0;
+          const header = document.getElementById('widgetHeader');
+          header.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            offsetX = e.clientX - el.offsetLeft;
+            offsetY = e.clientY - el.offsetTop;
+            document.body.style.userSelect = 'none';
+          });
+          window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            el.style.left = `${e.clientX - offsetX}px`;
+            el.style.top = `${e.clientY - offsetY}px`;
+            el.style.right = 'auto';
+            el.style.bottom = 'auto';
+          });
+          window.addEventListener('mouseup', () => {
+            isDragging = false;
+            document.body.style.userSelect = '';
+          });
+        })(widget);
 
         // ===== Init
         render();
         renderChart('week');
         requestAnimationFrame(tick);
       })();
-
-      // ===== Мини-виджет Pomodoro =====
-      const widget = document.getElementById('miniWidget');
-      const widgetTime = document.getElementById('widgetTime');
-      const widgetStatus = document.getElementById('widgetStatus');
-      const widgetToggle = document.getElementById('widgetToggle');
-
-      // функция обновления
-      function updateWidget() {
-        if (!widget) return;
-        widgetTime.textContent = timeEl.textContent;
-        widgetStatus.textContent =
-          state.mode === 'focus'
-            ? 'Фокус'
-            : state.mode === 'short'
-            ? 'Перерыв'
-            : 'Длинный';
-        widgetToggle.textContent = state.running ? '⏸️' : '▶️';
-      }
-
-      // каждые полсекунды обновляем данные
-      setInterval(updateWidget, 500);
-
-      // кнопка старт/пауза
-      widgetToggle.onclick = () => {
-        state.running ? pause() : start();
-        updateWidget();
-      };
-
-      // возможность двигать виджет мышкой
-      (function enableDrag(el) {
-        let isDragging = false,
-          offsetX,
-          offsetY;
-        const header = document.getElementById('widgetHeader');
-        header.addEventListener('mousedown', (e) => {
-          isDragging = true;
-          offsetX = e.clientX - el.getBoundingClientRect().left;
-          offsetY = e.clientY - el.getBoundingClientRect().top;
-        });
-        window.addEventListener('mousemove', (e) => {
-          if (!isDragging) return;
-          el.style.left = `${e.clientX - offsetX}px`;
-          el.style.top = `${e.clientY - offsetY}px`;
-          el.style.bottom = 'auto';
-          el.style.right = 'auto';
-        });
-        window.addEventListener('mouseup', () => (isDragging = false));
-      })(widget);
     </script>
-    <div id="miniWidget" class="widget">
-      <div id="widgetHeader">
-        <span id="widgetStatus">Фокус</span>
-        <button id="widgetToggle">⏸️</button>
-      </div>
-      <div id="widgetTime">25:00</div>
-    </div>
   </body>
 </html>

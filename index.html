@@ -1578,17 +1578,15 @@
         requestAnimationFrame(tick);
       })();
 
-      // ===== Мини-виджет Pomodoro
+      // ===== Мини-виджет Pomodoro =====
       const widget = document.getElementById('miniWidget');
       const widgetTime = document.getElementById('widgetTime');
       const widgetStatus = document.getElementById('widgetStatus');
       const widgetToggle = document.getElementById('widgetToggle');
 
-      // показываем виджет при запуске
-      widget.classList.remove('hidden');
-
-      // обновление времени и статуса
+      // функция обновления
       function updateWidget() {
+        if (!widget) return;
         widgetTime.textContent = timeEl.textContent;
         widgetStatus.textContent =
           state.mode === 'focus'
@@ -1598,15 +1596,17 @@
             : 'Длинный';
         widgetToggle.textContent = state.running ? '⏸️' : '▶️';
       }
+
+      // каждые полсекунды обновляем данные
       setInterval(updateWidget, 500);
 
-      // управление старт/пауза
+      // кнопка старт/пауза
       widgetToggle.onclick = () => {
         state.running ? pause() : start();
         updateWidget();
       };
 
-      // перетаскивание виджета мышкой
+      // возможность двигать виджет мышкой
       (function enableDrag(el) {
         let isDragging = false,
           offsetX,
@@ -1627,7 +1627,7 @@
         window.addEventListener('mouseup', () => (isDragging = false));
       })(widget);
     </script>
-    <div id="miniWidget" class="widget hidden">
+    <div id="miniWidget" class="widget">
       <div id="widgetHeader">
         <span id="widgetStatus">Фокус</span>
         <button id="widgetToggle">⏸️</button>

@@ -363,6 +363,38 @@
         color: #22c55e;
         font-weight: 700;
       }
+
+      .widget {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #121a33;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 14px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        padding: 10px 14px;
+        width: 150px;
+        color: #e2e8f0;
+        z-index: 9999;
+        user-select: none;
+        transition: opacity 0.2s;
+      }
+      .widget.hidden {
+        display: none;
+      }
+      .widget #widgetHeader {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 14px;
+        margin-bottom: 6px;
+        cursor: move;
+      }
+      .widget #widgetTime {
+        font-size: 24px;
+        font-weight: 700;
+        text-align: center;
+      }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -515,8 +547,7 @@
             <div class="row" style="margin-top: 10px; gap: 8px">
               <span class="panel-title" style="margin: 0">График</span>
               <div class="tabs" id="chartTabs">
-                <button class="tab active" data-range="day">День</button>
-                <button class="tab" data-range="week">Неделя</button>
+                <button class="tab active" data-range="week">Неделя</button>
                 <button class="tab" data-range="month">Месяц</button>
               </div>
               <select id="chartProject" title="Фильтр проекта"></select>
@@ -535,1025 +566,1073 @@
     </div>
 
     <script>
-            (() => {
-              // ===== Cloud (Supabase) config
-              const SUPABASE_URL = 'https://xilejbksbuexrncvtunb.supabase.co'; // <= замени
-              const SUPABASE_ANON_KEY =
-                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpbGVqYmtzYnVleHJuY3Z0dW5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0NjMxNDcsImV4cCI6MjA3NzAzOTE0N30.sF9ffDQYpxXSqbqlCNkklSoC0ZTzqO3pskOZ9AyHKsY'; // <= замени
-              const supa =
-                SUPABASE_URL.startsWith('https://') &&
-                !SUPABASE_ANON_KEY.includes('YOUR_')
-                  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-                  : null;
-              // ===== Восстановление сессии после магической ссылки =====
-              if (location.hash.includes('access_token')) {
-                const params = new URLSearchParams(location.hash.slice(1));
-                const access_token = params.get('access_token');
-                const refresh_token = params.get('refresh_token');
-                supa.auth.getUser().then(({ data }) => {
-                  const user = data?.user;
-                  user ? onSignedIn(user) : onSignedOut();
-                });
+      (() => {
+        // ===== Cloud (Supabase) config
+        const SUPABASE_URL = 'https://xilejbksbuexrncvtunb.supabase.co'; // <= замени
+        const SUPABASE_ANON_KEY =
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpbGVqYmtzYnVleHJuY3Z0dW5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0NjMxNDcsImV4cCI6MjA3NzAzOTE0N30.sF9ffDQYpxXSqbqlCNkklSoC0ZTzqO3pskOZ9AyHKsY'; // <= замени
+        const supa =
+          SUPABASE_URL.startsWith('https://') &&
+          !SUPABASE_ANON_KEY.includes('YOUR_')
+            ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+            : null;
+        // ===== Восстановление сессии после магической ссылки =====
+        if (location.hash.includes('access_token')) {
+          const params = new URLSearchParams(location.hash.slice(1));
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+          supa.auth.getUser().then(({ data }) => {
+            const user = data?.user;
+            user ? onSignedIn(user) : onSignedOut();
+          });
 
-                supa.auth.onAuthStateChange((_evt, session) => {
-                  const user = session?.user;
-                  user ? onSignedIn(user) : onSignedOut();
-                });
+          supa.auth.onAuthStateChange((_evt, session) => {
+            const user = session?.user;
+            user ? onSignedIn(user) : onSignedOut();
+          });
 
-                // Устанавливаем сессию вручную
-                supa.auth.setSession({ access_token, refresh_token }).then(() => {
-                  // очищаем hash из URL
-                  history.replaceState({}, document.title, location.pathname);
-                });
-              }
+          // Устанавливаем сессию вручную
+          supa.auth.setSession({ access_token, refresh_token }).then(() => {
+            // очищаем hash из URL
+            history.replaceState({}, document.title, location.pathname);
+          });
+        }
 
-              // ===== Helpers
-              const $ = (sel) => document.querySelector(sel);
-              const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-              const fmt = (s) => String(Math.floor(s)).padStart(2, '0');
-              // ===== Welcome banner (персональное приветствие)
-              const DEFAULT_INFO_HTML =
-                'Простая система для фокуса: 25/5, длинный перерыв каждые 4 сета. ' +
-                'Горячие клавиши: <b>Space</b> — старт/пауза, <b>R</b> — сброс, <b>1</b>/<b>2</b>/<b>3</b> — режимы.';
+        // ===== Helpers
+        const $ = (sel) => document.querySelector(sel);
+        const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+        const fmt = (s) => String(Math.floor(s)).padStart(2, '0');
+        // ===== Welcome banner (персональное приветствие)
+        const DEFAULT_INFO_HTML =
+          'Простая система для фокуса: 25/5, длинный перерыв каждые 4 сета. ' +
+          'Горячие клавиши: <b>Space</b> — старт/пауза, <b>R</b> — сброс, <b>1</b>/<b>2</b>/<b>3</b> — режимы.';
 
-              function updateWelcome(user) {
-                const el = document.getElementById('welcomeText');
-                if (!el) return;
-                if (user) {
-                  const name =
-                    (user.user_metadata && user.user_metadata.name) ||
-                    (user.email ? user.email.split('@')[0] : 'пользователь');
-                  el.innerHTML = `👋 Здравствуйте, <b>${name}</b>!`;
-                } else {
-                  el.innerHTML = DEFAULT_INFO_HTML;
-                }
-              }
+        function updateWelcome(user) {
+          const el = document.getElementById('welcomeText');
+          if (!el) return;
+          if (user) {
+            const name =
+              (user.user_metadata && user.user_metadata.name) ||
+              (user.email ? user.email.split('@')[0] : 'пользователь');
+            el.innerHTML = `👋 Здравствуйте, <b>${name}</b>!`;
+          } else {
+            el.innerHTML = DEFAULT_INFO_HTML;
+          }
+        }
 
-              // toast уведомление
-              function ensureToastEl() {
-                let el = document.getElementById('toast');
-                if (!el) {
-                  el = document.createElement('div');
-                  el.id = 'toast';
-                  el.className = 'toast';
-                  document.body.appendChild(el);
-                }
-                return el;
-              }
-              function showToast(message) {
-                const el = ensureToastEl();
-                el.innerHTML = `<span class="ok">✔</span>${message}`;
-                el.classList.add('show');
-                clearTimeout(showToast._t);
-                showToast._t = setTimeout(() => el.classList.remove('show'), 2200);
-              }
+        // toast уведомление
+        function ensureToastEl() {
+          let el = document.getElementById('toast');
+          if (!el) {
+            el = document.createElement('div');
+            el.id = 'toast';
+            el.className = 'toast';
+            document.body.appendChild(el);
+          }
+          return el;
+        }
+        function showToast(message) {
+          const el = ensureToastEl();
+          el.innerHTML = `<span class="ok">✔</span>${message}`;
+          el.classList.add('show');
+          clearTimeout(showToast._t);
+          showToast._t = setTimeout(() => el.classList.remove('show'), 2200);
+        }
 
-              // ===== Topbar Auth UI =====
-              const authIcon = document.getElementById('authIcon');
-              const authMenu = document.getElementById('authMenu');
-              const authEmailDisplay = document.getElementById('authEmailDisplay');
-              const authLoginBtn = document.getElementById('authLoginBtn');
-              const authLogoutBtn = document.getElementById('authLogoutBtn');
-              const authMenuEmail = document.getElementById('authMenuEmail');
+        // ===== Topbar Auth UI =====
+        const authIcon = document.getElementById('authIcon');
+        const authMenu = document.getElementById('authMenu');
+        const authEmailDisplay = document.getElementById('authEmailDisplay');
+        const authLoginBtn = document.getElementById('authLoginBtn');
+        const authLogoutBtn = document.getElementById('authLogoutBtn');
+        const authMenuEmail = document.getElementById('authMenuEmail');
 
-              authIcon.textContent = '👤'; // default
+        authIcon.textContent = '👤'; // default
 
-              authIcon.onclick = () => {
-                authMenu.classList.toggle('hidden');
+        authIcon.onclick = () => {
+          authMenu.classList.toggle('hidden');
+        };
+
+        authLoginBtn.onclick = async () => {
+          const email = (authMenuEmail?.value || '').trim();
+          if (!email) {
+            authMenuEmail?.focus();
+            return;
+          }
+
+          const { error } = await supa.auth.signInWithOtp({
+            email,
+            options: { emailRedirectTo: location.origin + location.pathname },
+          });
+
+          if (error) {
+            alert(error.message);
+          } else {
+            alert('Проверь почту!');
+            authMenu?.classList.add('hidden'); // спрятать меню
+          }
+        };
+
+        // запуск по Enter
+        authMenuEmail?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') authLoginBtn.click();
+        });
+
+        authLogoutBtn.onclick = async () => {
+          await supa.auth.signOut();
+          authMenu.classList.add('hidden');
+        };
+
+        // Обновление UI при изменении статуса
+        function updateAuthUI(user) {
+          if (user) {
+            authIcon.textContent = '✅';
+            authEmailDisplay.textContent = user.email;
+            authLoginBtn.style.display = 'none';
+            authLogoutBtn.style.display = 'block';
+            authMenuEmail && (authMenuEmail.style.display = 'none');
+          } else {
+            authIcon.textContent = '👤';
+            authEmailDisplay.textContent = 'Не вошли';
+            authLoginBtn.style.display = 'block';
+            authLogoutBtn.style.display = 'none';
+          }
+        }
+
+        // ===== State & Persistence
+        const LS_KEY = 'pomodoro.v2';
+        const nowISO = () => new Date().toISOString().slice(0, 10);
+
+        const defaultState = {
+          settings: {
+            focus: 25,
+            short: 5,
+            long: 15,
+            roundsToLong: 4,
+            autoNext: false,
+            soundOn: true,
+            notifyOn: false,
+          },
+          mode: 'focus',
+          rounds: 1,
+          remaining: 25 * 60,
+          running: false,
+          tasks: [],
+          projects: [{ id: 'default', name: 'Общее' }],
+          activeProjectId: 'default',
+          stats: {
+            todayDate: nowISO(),
+            todayFocusMin: 0,
+            setsDone: 0,
+            totalFocusMin: 0,
+            history: {},
+            todayByHour: Array.from({ length: 24 }, () => 0),
+            project: {
+              default: {
+                total: 0,
+                history: {},
+                todayByHour: Array.from({ length: 24 }, () => 0),
+              },
+            },
+          },
+        };
+
+        let state = load() || defaultState;
+        migrateState();
+
+        function load() {
+          try {
+            return JSON.parse(localStorage.getItem(LS_KEY));
+          } catch (e) {
+            return null;
+          }
+        }
+        function save() {
+          localStorage.setItem(LS_KEY, JSON.stringify(state));
+        }
+
+        function migrateState() {
+          const d = nowISO();
+          if (!state.stats)
+            state.stats = {
+              todayDate: d,
+              todayFocusMin: 0,
+              setsDone: 0,
+              totalFocusMin: 0,
+              history: {},
+              todayByHour: Array.from({ length: 24 }, () => 0),
+              project: {},
+            };
+          if (!state.stats.history) state.stats.history = {};
+          if (!state.stats.todayByHour)
+            state.stats.todayByHour = Array.from({ length: 24 }, () => 0);
+          if (
+            !state.projects ||
+            !Array.isArray(state.projects) ||
+            state.projects.length === 0
+          ) {
+            state.projects = [{ id: 'default', name: 'Общее' }];
+          }
+          if (!state.activeProjectId)
+            state.activeProjectId = state.projects[0].id;
+          if (!state.stats.project) state.stats.project = {};
+          state.projects.forEach((p) => {
+            if (!state.stats.project[p.id])
+              state.stats.project[p.id] = {
+                total: 0,
+                history: {},
+                todayByHour: Array.from({ length: 24 }, () => 0),
               };
+          });
+          if (state.stats.todayDate !== d) {
+            state.stats.todayDate = d;
+            state.stats.todayFocusMin = 0;
+            state.stats.todayByHour = Array.from({ length: 24 }, () => 0);
+            Object.values(state.stats.project).forEach(
+              (ps) => (ps.todayByHour = Array.from({ length: 24 }, () => 0))
+            );
+          }
+        }
 
-              authLoginBtn.onclick = async () => {
-                const email = (authMenuEmail?.value || '').trim();
-                if (!email) {
-                  authMenuEmail?.focus();
-                  return;
-                }
+        // ===== UI Elements
+        const timeEl = $('#time'),
+          startBtn = $('#startPause'),
+          skipBtn = $('#skip'),
+          resetBtn = $('#reset');
+        const roundInfo = $('#roundInfo'),
+          statusEl = $('#status'),
+          currentTask = $('#currentTask');
+        const modeTabs = $('#modeTabs');
 
-                const { error } = await supa.auth.signInWithOtp({
-                  email,
-                  options: { emailRedirectTo: location.origin + location.pathname },
-                });
+        const focusMins = $('#focusMins'),
+          shortMins = $('#shortMins'),
+          longMins = $('#longMins'),
+          roundsToLong = $('#roundsToLong');
+        const autoNext = $('#autoNext'),
+          soundOn = $('#soundOn'),
+          notifyOn = $('#notifyOn');
 
-                if (error) {
-                  alert(error.message);
-                } else {
-                  alert('Проверь почту!');
-                  authMenu?.classList.add('hidden'); // спрятать меню
-                }
-              };
+        const saveSettingsBtn = $('#saveSettings'),
+          resetStatsBtn = $('#resetStats');
+        const kpiToday = $('#kpiToday'),
+          kpiSets = $('#kpiSets'),
+          kpiTotal = $('#kpiTotal');
 
-              // запуск по Enter
-              authMenuEmail?.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') authLoginBtn.click();
+        const taskText = $('#taskText'),
+          addTask = $('#addTask'),
+          taskList = $('#taskList');
+
+        const activeProjectSel = $('#activeProject');
+        const quickAddProject = $('#quickAddProject');
+        const newProjectName = $('#newProjectName');
+        const addProjectBtn = $('#addProjectBtn');
+        const projectList = $('#projectList');
+
+        const chartTabs = document.getElementById('chartTabs');
+        const chartCanvas = document.getElementById('focusChart');
+        const chartProjectSel = document.getElementById('chartProject');
+        // Auth UI
+
+        // ===== Modes
+        const MODES = [
+          {
+            id: 'focus',
+            label: 'Фокус',
+            get secs() {
+              return state.settings.focus * 60;
+            },
+          },
+          {
+            id: 'short',
+            label: 'Перерыв',
+            get secs() {
+              return state.settings.short * 60;
+            },
+          },
+          {
+            id: 'long',
+            label: 'Длинный',
+            get secs() {
+              return state.settings.long * 60;
+            },
+          },
+        ];
+
+        function renderTabs() {
+          modeTabs.innerHTML = '';
+          MODES.forEach((m) => {
+            const b = document.createElement('button');
+            b.className = 'tab' + (state.mode === m.id ? ' active' : '');
+            b.textContent = m.label;
+            b.onclick = () => {
+              switchMode(m.id, true);
+              renderTabs();
+            };
+            modeTabs.appendChild(b);
+          });
+        }
+
+        function switchMode(id, manual = false) {
+          state.mode = id;
+          state.remaining = MODES.find((m) => m.id === id).secs;
+          state.running = false;
+          startBtn.textContent = 'Старт';
+          statusEl.textContent = manual ? 'Режим переключён' : 'Готов';
+          renderTime();
+          save();
+        }
+
+        // ===== Timer Engine
+        let raf, lastTick;
+        function tick(ts) {
+          if (!state.running) {
+            lastTick = ts;
+            raf = requestAnimationFrame(tick);
+            return;
+          }
+          if (!lastTick) lastTick = ts;
+          const dt = (ts - lastTick) / 1000;
+          lastTick = ts;
+          state.remaining -= dt;
+          if (state.remaining <= 0) {
+            state.remaining = 0;
+            state.running = false;
+            onTimerEnd();
+          }
+          renderTime();
+          raf = requestAnimationFrame(tick);
+        }
+
+        function start() {
+          state.running = true;
+          startBtn.textContent = 'Пауза';
+          statusEl.textContent = 'Идёт…';
+          save();
+        }
+        function pause() {
+          state.running = false;
+          startBtn.textContent = 'Старт';
+          statusEl.textContent = 'Пауза';
+          save();
+        }
+
+        function onTimerEnd() {
+          statusEl.textContent = 'Готов';
+          notify('Время вышло', labelFor(state.mode));
+          if (state.settings.soundOn) beep();
+          if (state.mode === 'focus') {
+            // считаем, сколько реально прошло минут
+            const totalSecs = MODES.find((m) => m.id === 'focus').secs;
+            const doneSecs = totalSecs - state.remaining;
+            const addMin = +(doneSecs / 60).toFixed(1); // до десятых долей минуты
+
+            state.stats.todayFocusMin += addMin;
+            state.stats.totalFocusMin += addMin;
+            state.stats.setsDone += 1;
+
+            const d = nowISO();
+            state.stats.history[d] = (state.stats.history[d] || 0) + addMin;
+
+            const h = new Date().getHours();
+            state.stats.todayByHour[h] =
+              (state.stats.todayByHour[h] || 0) + addMin;
+
+            const pid = state.activeProjectId;
+            const ps =
+              state.stats.project[pid] ||
+              (state.stats.project[pid] = {
+                total: 0,
+                history: {},
+                todayByHour: Array.from({ length: 24 }, () => 0),
               });
+            ps.total += addMin;
+            ps.history[d] = (ps.history[d] || 0) + addMin;
+            ps.todayByHour[h] = (ps.todayByHour[h] || 0) + addMin;
 
-              authLogoutBtn.onclick = async () => {
-                await supa.auth.signOut();
-                authMenu.classList.add('hidden');
-              };
+            state.rounds = (state.rounds % state.settings.roundsToLong) + 1;
+            renderChart();
+          }
 
-              // Обновление UI при изменении статуса
-              function updateAuthUI(user) {
-                if (user) {
-                  authIcon.textContent = '✅';
-                  authEmailDisplay.textContent = user.email;
-                  authLoginBtn.style.display = 'none';
-                  authLogoutBtn.style.display = 'block';
-                  authMenuEmail && (authMenuEmail.style.display = 'none');
-                } else {
-                  authIcon.textContent = '👤';
-                  authEmailDisplay.textContent = 'Не вошли';
-                  authLoginBtn.style.display = 'block';
-                  authLogoutBtn.style.display = 'none';
-                }
-              }
+          if (state.settings.autoNext) {
+            if (state.mode === 'focus')
+              state.mode =
+                (state.rounds - 1) % state.settings.roundsToLong === 0
+                  ? 'long'
+                  : 'short';
+            else state.mode = 'focus';
+            state.remaining = MODES.find((m) => m.id === state.mode).secs;
+            state.running = true;
+            startBtn.textContent = 'Пауза';
+          }
+          save();
+          renderKPIs();
+          renderRound();
+          // push to cloud (best-effort)
+          pushStatsToCloud({ day: d, minutes: addMin, projectId: pid }).catch(
+            () => {}
+          );
+        }
 
-              // ===== State & Persistence
-              const LS_KEY = 'pomodoro.v2';
-              const nowISO = () => new Date().toISOString().slice(0, 10);
+        // ===== Notifications & Sound (simple beep)
+        function beep() {
+          try {
+            const ac = new (window.AudioContext || window.webkitAudioContext)();
+            const o = ac.createOscillator();
+            const g = ac.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(660, ac.currentTime);
+            g.gain.setValueAtTime(0.001, ac.currentTime);
+            o.connect(g).connect(ac.destination);
+            g.gain.exponentialRampToValueAtTime(0.2, ac.currentTime + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.6);
+            o.start();
+            o.stop(ac.currentTime + 0.6);
+          } catch (e) {}
+        }
+        function notify(title, body) {
+          if (!state.settings.notifyOn) return;
+          if (Notification.permission === 'granted')
+            new Notification(title, { body });
+          else if (Notification.permission !== 'denied')
+            Notification.requestPermission().then((p) => {
+              if (p === 'granted') new Notification(title, { body });
+            });
+        }
+        function labelFor(mode) {
+          return mode === 'focus'
+            ? 'Фокус'
+            : mode === 'short'
+            ? 'Короткий перерыв'
+            : 'Длинный перерыв';
+        }
 
-              const defaultState = {
-                settings: {
-                  focus: 25,
-                  short: 5,
-                  long: 15,
-                  roundsToLong: 4,
-                  autoNext: false,
-                  soundOn: true,
-                  notifyOn: false,
-                },
-                mode: 'focus',
-                rounds: 1,
-                remaining: 25 * 60,
-                running: false,
-                tasks: [],
-                projects: [{ id: 'default', name: 'Общее' }],
-                activeProjectId: 'default',
-                stats: {
-                  todayDate: nowISO(),
-                  todayFocusMin: 0,
-                  setsDone: 0,
-                  totalFocusMin: 0,
-                  history: {},
-                  todayByHour: Array.from({ length: 24 }, () => 0),
-                  project: {
-                    default: {
-                      total: 0,
-                      history: {},
-                      todayByHour: Array.from({ length: 24 }, () => 0),
-                    },
-                  },
-                },
-              };
+        // ===== Render helpers
+        function renderTime() {
+          const s = Math.ceil(state.remaining);
+          timeEl.textContent = `${fmt(s / 60)}:${fmt(s % 60)}`;
+        }
+        function renderKPIs() {
+          kpiToday.textContent = `${state.stats.todayFocusMin} мин`;
+          kpiSets.textContent = state.stats.setsDone;
+          kpiTotal.textContent = `${state.stats.totalFocusMin} мин`;
+        }
+        function renderRound() {
+          roundInfo.textContent = `Раунд ${state.rounds}/${state.settings.roundsToLong}`;
+        }
+        function renderTasks() {
+          taskList.innerHTML = '';
+          state.tasks.forEach((t) => {
+            const e = document.createElement('div');
+            e.className = 'task' + (t.done ? ' done' : '');
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = t.done;
+            cb.onchange = () => {
+              t.done = cb.checked;
+              save();
+              renderTasks();
+            };
+            const span = document.createElement('div');
+            span.textContent = t.text;
+            const del = document.createElement('button');
+            del.className = 'btn ghost';
+            del.textContent = '×';
+            del.onclick = () => {
+              state.tasks = state.tasks.filter((x) => x.id !== t.id);
+              save();
+              renderTasks();
+              updateCurrentTask();
+            };
+            e.append(cb, span, del);
+            taskList.appendChild(e);
+          });
+          updateCurrentTask();
+        }
+        function updateCurrentTask() {
+          const t = state.tasks.find((t) => !t.done);
+          currentTask.textContent = 'Задача: ' + (t ? t.text : '—');
+        }
 
-              let state = load() || defaultState;
-              migrateState();
+        function renderProjectsUI() {
+          activeProjectSel.innerHTML = '';
+          state.projects.forEach((p) => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name;
+            if (p.id === state.activeProjectId) opt.selected = true;
+            activeProjectSel.appendChild(opt);
+          });
+          chartProjectSel.innerHTML = '';
+          const optAll = document.createElement('option');
+          optAll.value = '__all__';
+          optAll.textContent = 'Все проекты';
+          chartProjectSel.appendChild(optAll);
+          state.projects.forEach((p) => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name;
+            chartProjectSel.appendChild(opt);
+          });
+          if (
+            !['__all__', ...state.projects.map((p) => p.id)].includes(
+              chartProjectSel.value
+            )
+          )
+            chartProjectSel.value = '__all__';
+          projectList.innerHTML = '';
+          state.projects.forEach((p) => {
+            const row = document.createElement('div');
+            row.className = 'row';
+            row.style.justifyContent = 'space-between';
+            const info = document.createElement('div');
+            info.textContent = p.name;
+            const right = document.createElement('div');
+            right.className = 'row';
+            const setBtn = document.createElement('button');
+            setBtn.className = 'pill';
+            setBtn.textContent = 'Сделать активным';
+            setBtn.type = 'button';
+            setBtn.dataset.action = 'set-active';
+            setBtn.dataset.id = p.id;
+            const delBtn = document.createElement('button');
+            delBtn.className = 'pill';
+            delBtn.textContent = 'Удалить';
+            delBtn.type = 'button';
+            delBtn.dataset.action = 'delete';
+            delBtn.dataset.id = p.id;
 
-              function load() {
-                try {
-                  return JSON.parse(localStorage.getItem(LS_KEY));
-                } catch (e) {
-                  return null;
-                }
-              }
-              function save() {
-                localStorage.setItem(LS_KEY, JSON.stringify(state));
-              }
+            right.append(setBtn, delBtn);
+            row.append(info, right);
+            projectList.appendChild(row);
+          });
+        }
 
-              function migrateState() {
-                const d = nowISO();
-                if (!state.stats)
-                  state.stats = {
-                    todayDate: d,
-                    todayFocusMin: 0,
-                    setsDone: 0,
-                    totalFocusMin: 0,
-                    history: {},
-                    todayByHour: Array.from({ length: 24 }, () => 0),
-                    project: {},
-                  };
-                if (!state.stats.history) state.stats.history = {};
-                if (!state.stats.todayByHour)
-                  state.stats.todayByHour = Array.from({ length: 24 }, () => 0);
-                if (
-                  !state.projects ||
-                  !Array.isArray(state.projects) ||
-                  state.projects.length === 0
-                ) {
-                  state.projects = [{ id: 'default', name: 'Общее' }];
-                }
-                if (!state.activeProjectId)
-                  state.activeProjectId = state.projects[0].id;
-                if (!state.stats.project) state.stats.project = {};
-                state.projects.forEach((p) => {
-                  if (!state.stats.project[p.id])
-                    state.stats.project[p.id] = {
-                      total: 0,
-                      history: {},
-                      todayByHour: Array.from({ length: 24 }, () => 0),
-                    };
-                });
-                if (state.stats.todayDate !== d) {
-                  state.stats.todayDate = d;
-                  state.stats.todayFocusMin = 0;
-                  state.stats.todayByHour = Array.from({ length: 24 }, () => 0);
-                  Object.values(state.stats.project).forEach(
-                    (ps) => (ps.todayByHour = Array.from({ length: 24 }, () => 0))
-                  );
-                }
-              }
+        function render() {
+          focusMins.value = state.settings.focus;
+          shortMins.value = state.settings.short;
+          longMins.value = state.settings.long;
+          roundsToLong.value = state.settings.roundsToLong;
+          autoNext.checked = state.settings.autoNext;
+          soundOn.checked = state.settings.soundOn;
+          notifyOn.checked = state.settings.notifyOn;
+          renderTabs();
+          renderTime();
+          renderRound();
+          renderKPIs();
+          renderTasks();
+          renderProjectsUI();
+        }
 
-              // ===== UI Elements
-              const timeEl = $('#time'),
-                startBtn = $('#startPause'),
-                skipBtn = $('#skip'),
-                resetBtn = $('#reset');
-              const roundInfo = $('#roundInfo'),
-                statusEl = $('#status'),
-                currentTask = $('#currentTask');
-              const modeTabs = $('#modeTabs');
+        // ===== Events
+        startBtn.onclick = () => (state.running ? pause() : start());
+        skipBtn.onclick = () => {
+          state.remaining = 0.01;
+          save();
+        };
+        resetBtn.onclick = () => {
+          state.remaining = MODES.find((m) => m.id === state.mode).secs;
+          pause();
+          renderTime();
+          save();
+        };
 
-              const focusMins = $('#focusMins'),
-                shortMins = $('#shortMins'),
-                longMins = $('#longMins'),
-                roundsToLong = $('#roundsToLong');
-              const autoNext = $('#autoNext'),
-                soundOn = $('#soundOn'),
-                notifyOn = $('#notifyOn');
+        activeProjectSel.onchange = () => {
+          state.activeProjectId = activeProjectSel.value;
+          save();
+        };
+        quickAddProject.onclick = () => {
+          const name = prompt('Название проекта:')?.trim();
+          if (!name) return;
+          addProject(name);
+        };
+        addProjectBtn.onclick = () => {
+          const name = newProjectName.value.trim();
+          if (!name) return addProjectBtn.blur();
+          addProject(name);
+          newProjectName.value = '';
+        };
 
-              const saveSettingsBtn = $('#saveSettings'),
-                resetStatsBtn = $('#resetStats');
-              const kpiToday = $('#kpiToday'),
-                kpiSets = $('#kpiSets'),
-                kpiTotal = $('#kpiTotal');
+        function addProject(name) {
+          const id = crypto.randomUUID();
+          state.projects.push({ id, name });
+          state.stats.project[id] = {
+            total: 0,
+            history: {},
+            todayByHour: Array.from({ length: 24 }, () => 0),
+          };
+          state.activeProjectId = id;
+          save();
+          pushProjectToCloud({ id, name }).catch(() => {});
+          renderProjectsUI();
+          renderChart();
+        }
+        function deleteProject(id) {
+          const row = document
+            .querySelector(`[data-id="${id}"]`)
+            ?.closest('.row');
+          if (row) {
+            row.style.transition = 'opacity .3s';
+            row.style.opacity = 0;
+            setTimeout(() => {
+              state.projects = state.projects.filter((p) => p.id !== id);
+              delete state.stats.project[id];
+              if (state.activeProjectId === id)
+                state.activeProjectId = 'default';
+              if (chartProjectSel && chartProjectSel.value === id)
+                chartProjectSel.value = '__all__';
+              save();
+              renderProjectsUI();
+              renderChart();
+            }, 300);
+          } else {
+            state.projects = state.projects.filter((p) => p.id !== id);
+            delete state.stats.project[id];
+            if (state.activeProjectId === id) {
+              const next = state.projects.find((p) => p.id !== id);
+              state.activeProjectId = next ? next.id : null;
+            }
 
-              const taskText = $('#taskText'),
-                addTask = $('#addTask'),
-                taskList = $('#taskList');
+            if (chartProjectSel && chartProjectSel.value === id)
+              chartProjectSel.value = '__all__';
+            save();
+            renderProjectsUI();
+            renderChart();
+          }
+        }
 
-              const activeProjectSel = $('#activeProject');
-              const quickAddProject = $('#quickAddProject');
-              const newProjectName = $('#newProjectName');
-              const addProjectBtn = $('#addProjectBtn');
-              const projectList = $('#projectList');
+        saveSettingsBtn.onclick = () => {
+          const f = Math.max(1, +focusMins.value | 0),
+            s = Math.max(1, +shortMins.value | 0),
+            l = Math.max(1, +longMins.value | 0),
+            r = Math.max(2, +roundsToLong.value | 0);
+          state.settings = {
+            focus: f,
+            short: s,
+            long: l,
+            roundsToLong: r,
+            autoNext: autoNext.checked,
+            soundOn: soundOn.checked,
+            notifyOn: notifyOn.checked,
+          };
+          if (state.mode === 'focus') state.remaining = f * 60;
+          if (state.mode === 'short') state.remaining = s * 60;
+          if (state.mode === 'long') state.remaining = l * 60;
+          statusEl.textContent = 'Сохранено';
+          save();
+          renderTime();
+        };
 
-              const chartTabs = document.getElementById('chartTabs');
-              const chartCanvas = document.getElementById('focusChart');
-              const chartProjectSel = document.getElementById('chartProject');
-              // Auth UI
+        resetStatsBtn.onclick = () => {
+          // без confirm — сразу сбрасываем
+          const d = nowISO();
+          state.stats = {
+            todayDate: d,
+            todayFocusMin: 0,
+            setsDone: 0,
+            totalFocusMin: 0,
+            history: {},
+            todayByHour: Array.from({ length: 24 }, () => 0),
+            project: {},
+          };
+          state.projects.forEach((p) => {
+            state.stats.project[p.id] = {
+              total: 0,
+              history: {},
+              todayByHour: Array.from({ length: 24 }, () => 0),
+            };
+          });
+          save();
+          renderKPIs();
+          renderChart();
 
+          // красивое уведомление
+          showToast('Статистика сброшена');
+        };
+        addTask.onclick = addTaskFromInput;
+        taskText.onkeydown = (e) => {
+          if (e.key === 'Enter') {
+            addTaskFromInput();
+          }
+        };
+        function addTaskFromInput() {
+          const t = taskText.value.trim();
+          if (!t) return;
+          state.tasks.push({ id: crypto.randomUUID(), text: t, done: false });
+          taskText.value = '';
+          save();
+          renderTasks();
+        }
 
-              // ===== Modes
-              const MODES = [
-                {
-                  id: 'focus',
-                  label: 'Фокус',
-                  get secs() {
-                    return state.settings.focus * 60;
-                  },
-                },
-                {
-                  id: 'short',
-                  label: 'Перерыв',
-                  get secs() {
-                    return state.settings.short * 60;
-                  },
-                },
-                {
-                  id: 'long',
-                  label: 'Длинный',
-                  get secs() {
-                    return state.settings.long * 60;
-                  },
-                },
-              ];
+        window.addEventListener('keydown', (e) => {
+          if (
+            ['INPUT', 'TEXTAREA', 'SELECT'].includes(
+              document.activeElement.tagName
+            )
+          )
+            return;
+          if (e.code === 'Space') {
+            e.preventDefault();
+            state.running ? pause() : start();
+          }
+          if (e.key === 'r' || e.key === 'R') {
+            e.preventDefault();
+            resetBtn.click();
+          }
+          if (e.key === '1') {
+            switchMode('focus', true);
+            renderTabs();
+          }
+          if (e.key === '2') {
+            switchMode('short', true);
+            renderTabs();
+          }
+          if (e.key === '3') {
+            switchMode('long', true);
+            renderTabs();
+          }
+        });
 
-              function renderTabs() {
-                modeTabs.innerHTML = '';
-                MODES.forEach((m) => {
-                  const b = document.createElement('button');
-                  b.className = 'tab' + (state.mode === m.id ? ' active' : '');
-                  b.textContent = m.label;
-                  b.onclick = () => {
-                    switchMode(m.id, true);
-                    renderTabs();
+        async function onSignedIn(user) {
+          updateAuthUI(user);
+          const welcome = document.getElementById('welcomeText');
+          if (welcome) {
+            const name = user.user_metadata?.name || user.email.split('@')[0];
+            welcome.innerHTML = `👋 Здравствуйте, <b>${name}</b>!`;
+          }
 
-                  };
-                  modeTabs.appendChild(b);
-                });
-              }
-
-              function switchMode(id, manual = false) {
-                state.mode = id;
-                state.remaining = MODES.find((m) => m.id === id).secs;
-                state.running = false;
-                startBtn.textContent = 'Старт';
-                statusEl.textContent = manual ? 'Режим переключён' : 'Готов';
-                renderTime();
-                save();
-              }
-
-              // ===== Timer Engine
-              let raf, lastTick;
-              function tick(ts) {
-                if (!state.running) {
-                  lastTick = ts;
-                  raf = requestAnimationFrame(tick);
-                  return;
-                }
-                if (!lastTick) lastTick = ts;
-                const dt = (ts - lastTick) / 1000;
-                lastTick = ts;
-                state.remaining -= dt;
-                if (state.remaining <= 0) {
-                  state.remaining = 0;
-                  state.running = false;
-                  onTimerEnd();
-                }
-                renderTime();
-                raf = requestAnimationFrame(tick);
-              }
-
-              function start() {
-                state.running = true;
-                startBtn.textContent = 'Пауза';
-                statusEl.textContent = 'Идёт…';
-                save();
-              }
-              function pause() {
-                state.running = false;
-                startBtn.textContent = 'Старт';
-                statusEl.textContent = 'Пауза';
-                save();
-              }
-
-              function onTimerEnd() {
-                statusEl.textContent = 'Готов';
-                notify('Время вышло', labelFor(state.mode));
-                if (state.settings.soundOn) beep();
-                if (state.mode === 'focus') {
-                  const addMin = Math.round(MODES[0].secs / 60);
-                  state.stats.todayFocusMin += addMin;
-                  state.stats.totalFocusMin += addMin;
-                  state.stats.setsDone += 1;
-                  const d = nowISO();
-                  state.stats.history[d] = (state.stats.history[d] || 0) + addMin;
-                  const h = new Date().getHours();
-                  state.stats.todayByHour[h] =
-                    (state.stats.todayByHour[h] || 0) + addMin;
-                  const pid = state.activeProjectId;
-                  const ps =
-                    state.stats.project[pid] ||
-                    (state.stats.project[pid] = {
-                      total: 0,
-                      history: {},
-                      todayByHour: Array.from({ length: 24 }, () => 0),
-                    });
-                  ps.total += addMin;
-                  ps.history[d] = (ps.history[d] || 0) + addMin;
-                  ps.todayByHour[h] = (ps.todayByHour[h] || 0) + addMin;
-                  state.rounds = (state.rounds % state.settings.roundsToLong) + 1;
-                  renderChart();
-                }
-                if (state.settings.autoNext) {
-                  if (state.mode === 'focus')
-                    state.mode =
-                      (state.rounds - 1) % state.settings.roundsToLong === 0
-                        ? 'long'
-                        : 'short';
-                  else state.mode = 'focus';
-                  state.remaining = MODES.find((m) => m.id === state.mode).secs;
-                  state.running = true;
-                  startBtn.textContent = 'Пауза';
-                }
-                save();
-                renderKPIs();
-                renderRound();
-                // push to cloud (best-effort)
-                pushStatsToCloud({ day: d, minutes: addMin, projectId: pid }).catch(
-                  () => {}
-                );
-              }
-
-              // ===== Notifications & Sound (simple beep)
-              function beep() {
-                try {
-                  const ac = new (window.AudioContext || window.webkitAudioContext)();
-                  const o = ac.createOscillator();
-                  const g = ac.createGain();
-                  o.type = 'sine';
-                  o.frequency.setValueAtTime(660, ac.currentTime);
-                  g.gain.setValueAtTime(0.001, ac.currentTime);
-                  o.connect(g).connect(ac.destination);
-                  g.gain.exponentialRampToValueAtTime(0.2, ac.currentTime + 0.02);
-                  g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.6);
-                  o.start();
-                  o.stop(ac.currentTime + 0.6);
-                } catch (e) {}
-              }
-              function notify(title, body) {
-                if (!state.settings.notifyOn) return;
-                if (Notification.permission === 'granted')
-                  new Notification(title, { body });
-                else if (Notification.permission !== 'denied')
-                  Notification.requestPermission().then((p) => {
-                    if (p === 'granted') new Notification(title, { body });
-                  });
-              }
-              function labelFor(mode) {
-                return mode === 'focus'
-                  ? 'Фокус'
-                  : mode === 'short'
-                  ? 'Короткий перерыв'
-                  : 'Длинный перерыв';
-              }
-
-              // ===== Render helpers
-              function renderTime() {
-                const s = Math.ceil(state.remaining);
-                timeEl.textContent = `${fmt(s / 60)}:${fmt(s % 60)}`;
-              }
-              function renderKPIs() {
-                kpiToday.textContent = `${state.stats.todayFocusMin} мин`;
-                kpiSets.textContent = state.stats.setsDone;
-                kpiTotal.textContent = `${state.stats.totalFocusMin} мин`;
-              }
-              function renderRound() {
-                roundInfo.textContent = `Раунд ${state.rounds}/${state.settings.roundsToLong}`;
-              }
-              function renderTasks() {
-                taskList.innerHTML = '';
-                state.tasks.forEach((t) => {
-                  const e = document.createElement('div');
-                  e.className = 'task' + (t.done ? ' done' : '');
-                  const cb = document.createElement('input');
-                  cb.type = 'checkbox';
-                  cb.checked = t.done;
-                  cb.onchange = () => {
-                    t.done = cb.checked;
-                    save();
-                    renderTasks();
-                  };
-                  const span = document.createElement('div');
-                  span.textContent = t.text;
-                  const del = document.createElement('button');
-                  del.className = 'btn ghost';
-                  del.textContent = '×';
-                  del.onclick = () => {
-                    state.tasks = state.tasks.filter((x) => x.id !== t.id);
-                    save();
-                    renderTasks();
-                    updateCurrentTask();
-                  };
-                  e.append(cb, span, del);
-                  taskList.appendChild(e);
-                });
-                updateCurrentTask();
-              }
-              function updateCurrentTask() {
-                const t = state.tasks.find((t) => !t.done);
-                currentTask.textContent = 'Задача: ' + (t ? t.text : '—');
-              }
-
-              function renderProjectsUI() {
-                activeProjectSel.innerHTML = '';
-                state.projects.forEach((p) => {
-                  const opt = document.createElement('option');
-                  opt.value = p.id;
-                  opt.textContent = p.name;
-                  if (p.id === state.activeProjectId) opt.selected = true;
-                  activeProjectSel.appendChild(opt);
-                });
-                chartProjectSel.innerHTML = '';
-                const optAll = document.createElement('option');
-                optAll.value = '__all__';
-                optAll.textContent = 'Все проекты';
-                chartProjectSel.appendChild(optAll);
-                state.projects.forEach((p) => {
-                  const opt = document.createElement('option');
-                  opt.value = p.id;
-                  opt.textContent = p.name;
-                  chartProjectSel.appendChild(opt);
-                });
-                if (
-                  !['__all__', ...state.projects.map((p) => p.id)].includes(
-                    chartProjectSel.value
-                  )
-                )
-                  chartProjectSel.value = '__all__';
-                projectList.innerHTML = '';
-                state.projects.forEach((p) => {
-                  const row = document.createElement('div');
-                  row.className = 'row';
-                  row.style.justifyContent = 'space-between';
-                  const info = document.createElement('div');
-                  info.textContent = p.name;
-                  const right = document.createElement('div');
-                  right.className = 'row';
-                  const setBtn = document.createElement('button');
-                  setBtn.className = 'pill';
-                  setBtn.textContent = 'Сделать активным';
-                  setBtn.type = 'button';
-                  setBtn.dataset.action = 'set-active';
-                  setBtn.dataset.id = p.id;
-                  const delBtn = document.createElement('button');
-                  delBtn.className = 'pill';
-                  delBtn.textContent = 'Удалить';
-                  delBtn.type = 'button';
-                  delBtn.dataset.action = 'delete';
-                  delBtn.dataset.id = p.id;
-                  if (p.id === 'default') delBtn.disabled = true;
-                  right.append(setBtn, delBtn);
-                  row.append(info, right);
-                  projectList.appendChild(row);
-                });
-              }
-
-              function render() {
-                focusMins.value = state.settings.focus;
-                shortMins.value = state.settings.short;
-                longMins.value = state.settings.long;
-                roundsToLong.value = state.settings.roundsToLong;
-                autoNext.checked = state.settings.autoNext;
-                soundOn.checked = state.settings.soundOn;
-                notifyOn.checked = state.settings.notifyOn;
-                renderTabs();
-                renderTime();
-                renderRound();
-                renderKPIs();
-                renderTasks();
-                renderProjectsUI();
-              }
-
-              // ===== Events
-              startBtn.onclick = () => (state.running ? pause() : start());
-              skipBtn.onclick = () => {
-                state.remaining = 0.01;
-                save();
-              };
-              resetBtn.onclick = () => {
-                state.remaining = MODES.find((m) => m.id === state.mode).secs;
-                pause();
-                renderTime();
-                save();
-              };
-
-              activeProjectSel.onchange = () => {
-                state.activeProjectId = activeProjectSel.value;
-                save();
-              };
-              quickAddProject.onclick = () => {
-                const name = prompt('Название проекта:')?.trim();
-                if (!name) return;
-                addProject(name);
-              };
-              addProjectBtn.onclick = () => {
-                const name = newProjectName.value.trim();
-                if (!name) return addProjectBtn.blur();
-                addProject(name);
-                newProjectName.value = '';
-              };
-
-              function addProject(name) {
-                const id = crypto.randomUUID();
-                state.projects.push({ id, name });
-                state.stats.project[id] = {
-                  total: 0,
-                  history: {},
-                  todayByHour: Array.from({ length: 24 }, () => 0),
-                };
-                state.activeProjectId = id;
-                save();
-                pushProjectToCloud({ id, name }).catch(() => {});
-                renderProjectsUI();
-                renderChart();
-              }
-              function deleteProject(id) {
-                if (id === 'default') return;
-                const row = document
-                  .querySelector(`[data-id="${id}"]`)
-                  ?.closest('.row');
-                if (row) {
-                  row.style.transition = 'opacity .3s';
-                  row.style.opacity = 0;
-                  setTimeout(() => {
-                    state.projects = state.projects.filter((p) => p.id !== id);
-                    delete state.stats.project[id];
-                    if (state.activeProjectId === id)
-                      state.activeProjectId = 'default';
-                    if (chartProjectSel && chartProjectSel.value === id)
-                      chartProjectSel.value = '__all__';
-                    save();
-                    renderProjectsUI();
-                    renderChart();
-                  }, 300);
-                } else {
-                  state.projects = state.projects.filter((p) => p.id !== id);
-                  delete state.stats.project[id];
-                  if (state.activeProjectId === id) state.activeProjectId = 'default';
-                  if (chartProjectSel && chartProjectSel.value === id)
-                    chartProjectSel.value = '__all__';
-                  save();
-                  renderProjectsUI();
-                  renderChart();
-                }
-              }
-
-              saveSettingsBtn.onclick = () => {
-                const f = Math.max(1, +focusMins.value | 0),
-                  s = Math.max(1, +shortMins.value | 0),
-                  l = Math.max(1, +longMins.value | 0),
-                  r = Math.max(2, +roundsToLong.value | 0);
-                state.settings = {
-                  focus: f,
-                  short: s,
-                  long: l,
-                  roundsToLong: r,
-                  autoNext: autoNext.checked,
-                  soundOn: soundOn.checked,
-                  notifyOn: notifyOn.checked,
-                };
-                if (state.mode === 'focus') state.remaining = f * 60;
-                if (state.mode === 'short') state.remaining = s * 60;
-                if (state.mode === 'long') state.remaining = l * 60;
-                statusEl.textContent = 'Сохранено';
-                save();
-                renderTime();
-              };
-
-              resetStatsBtn.onclick = () => {
-                // без confirm — сразу сбрасываем
-                const d = nowISO();
-                state.stats = {
-                  todayDate: d,
-                  todayFocusMin: 0,
-                  setsDone: 0,
-                  totalFocusMin: 0,
-                  history: {},
-                  todayByHour: Array.from({ length: 24 }, () => 0),
-                  project: {},
-                };
-                state.projects.forEach((p) => {
-                  state.stats.project[p.id] = {
+          try {
+            const [projects, stats] = await Promise.all([
+              pullProjectsFromCloud(),
+              pullStatsFromCloud(120),
+            ]);
+            // merge projects
+            if (projects?.length) {
+              const existing = new Set(state.projects.map((p) => p.id));
+              projects.forEach((p) => {
+                if (!existing.has(p.id)) {
+                  state.projects.push({ id: p.id, name: p.name });
+                  state.stats.project[p.id] = state.stats.project[p.id] || {
                     total: 0,
                     history: {},
                     todayByHour: Array.from({ length: 24 }, () => 0),
                   };
-                });
-                save();
-                renderKPIs();
-                renderChart();
-
-                // красивое уведомление
-                showToast('Статистика сброшена');
-              };
-              addTask.onclick = addTaskFromInput;
-              taskText.onkeydown = (e) => {
-                if (e.key === 'Enter') {
-                  addTaskFromInput();
-                }
-              };
-              function addTaskFromInput() {
-                const t = taskText.value.trim();
-                if (!t) return;
-                state.tasks.push({ id: crypto.randomUUID(), text: t, done: false });
-                taskText.value = '';
-                save();
-                renderTasks();
-              }
-
-              window.addEventListener('keydown', (e) => {
-                if (
-                  ['INPUT', 'TEXTAREA', 'SELECT'].includes(
-                    document.activeElement.tagName
-                  )
-                )
-                  return;
-                if (e.code === 'Space') {
-                  e.preventDefault();
-                  state.running ? pause() : start();
-                }
-                if (e.key === 'r' || e.key === 'R') {
-                  e.preventDefault();
-                  resetBtn.click();
-                }
-                if (e.key === '1') {
-                  switchMode('focus', true);
-                  renderTabs();
-                }
-                if (e.key === '2') {
-                  switchMode('short', true);
-                  renderTabs();
-                }
-                if (e.key === '3') {
-                  switchMode('long', true);
-                  renderTabs();
                 }
               });
-
-
-
-              
-
-
-              async function onSignedIn(user) {
-                updateAuthUI(user);
-                const welcome = document.getElementById('welcomeText');
-                if (welcome) {
-                  const name = user.user_metadata?.name || user.email.split('@')[0];
-                  welcome.innerHTML = `👋 Здравствуйте, <b>${name}</b>!`;
-                }
-
-                try {
-                  const [projects, stats] = await Promise.all([
-                    pullProjectsFromCloud(),
-                    pullStatsFromCloud(120),
-                  ]);
-                  // merge projects
-                  if (projects?.length) {
-                    const existing = new Set(state.projects.map((p) => p.id));
-                    projects.forEach((p) => {
-                      if (!existing.has(p.id)) {
-                        state.projects.push({ id: p.id, name: p.name });
-                        state.stats.project[p.id] = state.stats.project[p.id] || {
-                          total: 0,
-                          history: {},
-                          todayByHour: Array.from({ length: 24 }, () => 0),
-                        };
-                      }
+            }
+            // merge stats
+            if (stats?.length) {
+              stats.forEach((row) => {
+                const day = row.day.slice(0, 10);
+                const minutes = row.minutes | 0;
+                if (row.project_id) {
+                  const ps =
+                    state.stats.project[row.project_id] ||
+                    (state.stats.project[row.project_id] = {
+                      total: 0,
+                      history: {},
+                      todayByHour: Array.from({ length: 24 }, () => 0),
                     });
-                  }
-                  // merge stats
-                  if (stats?.length) {
-                    stats.forEach((row) => {
-                      const day = row.day.slice(0, 10);
-                      const minutes = row.minutes | 0;
-                      if (row.project_id) {
-                        const ps =
-                          state.stats.project[row.project_id] ||
-                          (state.stats.project[row.project_id] = {
-                            total: 0,
-                            history: {},
-                            todayByHour: Array.from({ length: 24 }, () => 0),
-                          });
-                        ps.history[day] = Math.max(ps.history[day] || 0, minutes);
-                        ps.total = Object.values(ps.history).reduce(
-                          (a, b) => a + b,
-                          0
-                        );
-                      } else {
-                        state.stats.history[day] = Math.max(
-                          state.stats.history[day] || 0,
-                          minutes
-                        );
-                      }
-                    });
-                  }
-                  save();
-                  renderProjectsUI();
-                  renderChart();
-                  renderKPIs();
-                } catch (err) {
-                  console.warn('sync failed', err);
-                }
-              }
-              function onSignedOut() {
-        updateAuthUI(null);
-        const welcome = document.getElementById('welcomeText');
-        if (welcome) {
-          welcome.innerHTML =
-            'Простая система для фокуса: 25/5, длинный перерыв каждые 4 сета. Горячие клавиши: <b>Space</b> — старт/пауза, <b>R</b> — сброс, <b>1</b>/<b>2</b>/<b>3</b> — режимы.';
-        }
-      }
-
-
-              if (supa) {
-                supa.auth.getUser().then(({ data }) => {
-                  const user = data?.user;
-                  user ? onSignedIn(user) : onSignedOut();
-                });
-                supa.auth.onAuthStateChange((_evt, session) => {
-                  const user = session?.user;
-                  user ? onSignedIn(user) : onSignedOut();
-                });
-              } else {
-                updateAuthUI(null);
-  updateWelcome(null);
-              }
-
-
-              async function pushProjectToCloud({ id, name }) {
-                if (!supa) return;
-                const u = (await supa.auth.getUser()).data.user;
-                if (!u) return;
-                await supa.from('projects').upsert({ id, user_id: u.id, name });
-              }
-              async function deleteProjectFromCloud(id) {
-                if (!supa) return;
-                const u = (await supa.auth.getUser()).data.user;
-                if (!u) return;
-                await supa.from('projects').delete().eq('id', id).eq('user_id', u.id);
-              }
-
-              async function pushStatsToCloud({ day, minutes, projectId }) {
-                if (!supa) return;
-                const u = (await supa.auth.getUser()).data.user;
-                if (!u) return;
-                const { data: rows, error: selErr } = await supa
-                  .from('stats_by_day')
-                  .select('minutes')
-                  .eq('user_id', u.id)
-                  .eq('day', day)
-                  .eq('project_id', projectId || null)
-                  .limit(1);
-                if (selErr) {
-                  console.warn(selErr);
-                  return;
-                }
-                const current = rows?.[0]?.minutes || 0;
-                const total = current + minutes;
-                const { error: upErr } = await supa.from('stats_by_day').upsert({
-                  user_id: u.id,
-                  project_id: projectId || null,
-                  day,
-                  minutes: total,
-                });
-                if (upErr) console.warn(upErr);
-              }
-
-              async function pullProjectsFromCloud() {
-                if (!supa) return [];
-                const u = (await supa.auth.getUser()).data.user;
-                if (!u) return [];
-                const { data } = await supa
-                  .from('projects')
-                  .select('id,name')
-                  .order('created_at', { ascending: true });
-                return data || [];
-              }
-              async function pullStatsFromCloud(days) {
-                if (!supa) return [];
-                const u = (await supa.auth.getUser()).data.user;
-                if (!u) return [];
-                const since = new Date();
-                since.setDate(since.getDate() - (days || 60));
-                const { data } = await supa
-                  .from('stats_by_day')
-                  .select('day,minutes,project_id')
-                  .gte('day', since.toISOString().slice(0, 10));
-                return data || [];
-              }
-
-              // ===== Chart helpers & data series
-              let chart,
-                chartRange = 'day';
-              function getLastNDates(n) {
-                const res = [];
-                const base = new Date();
-                for (let i = n - 1; i >= 0; i--) {
-                  const d = new Date(base);
-                  d.setDate(base.getDate() - i);
-                  res.push(d.toISOString().slice(0, 10));
-                }
-                return res;
-              }
-              function getSeries(range, projectId) {
-                let labels = [],
-                  data = [];
-                if (range === 'day') {
-                  labels = Array.from({ length: 24 }, (_, h) => `${h}:00`);
-                  data =
-                    projectId && projectId !== '__all__'
-                      ? state.stats.project[projectId]?.todayByHour ||
-                        Array.from({ length: 24 }, () => 0)
-                      : state.stats.todayByHour;
+                  ps.history[day] = Math.max(ps.history[day] || 0, minutes);
+                  ps.total = Object.values(ps.history).reduce(
+                    (a, b) => a + b,
+                    0
+                  );
                 } else {
-                  const n = range === 'week' ? 7 : 30;
-                  const days = getLastNDates(n);
-                  labels = days.map((d) => d.slice(5));
-                  data = days.map((d) =>
-                    projectId && projectId !== '__all__'
-                      ? state.stats.project[projectId]?.history?.[d] || 0
-                      : state.stats.history[d] || 0
+                  state.stats.history[day] = Math.max(
+                    state.stats.history[day] || 0,
+                    minutes
                   );
                 }
-                return { labels, data };
-              }
-              function renderChart(range = chartRange) {
-                chartRange = range;
-                const pid = chartProjectSel?.value || '__all__';
-                const { labels, data } = getSeries(range, pid);
-                const ds = {
-                  label:
-                    pid === '__all__'
-                      ? 'Минуты фокуса (все проекты)'
-                      : 'Минуты фокуса',
-                  data,
-                  borderWidth: 1,
-                  backgroundColor: 'rgba(124,92,255,0.6)',
-                  borderColor: 'rgba(124,92,255,1)',
-                  borderRadius: 4,
-                };
-                if (chart) {
-                  chart.config.type = 'bar';
-                  chart.data.labels = labels;
-                  chart.data.datasets[0].data = data;
-                  chart.data.datasets[0].label = ds.label;
-                  chart.update();
-                  return;
-                }
-                chart = new Chart(chartCanvas, {
-                  type: 'bar',
-                  data: { labels, datasets: [ds] },
-                  options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                      x: {
-                        grid: { color: 'rgba(255,255,255,.05)' },
-                        ticks: { color: '#a9b5c7' },
-                      },
-                      y: {
-                        beginAtZero: true,
-                        grid: { color: 'rgba(255,255,255,.07)' },
-                        ticks: { color: '#a9b5c7' },
-                      },
-                    },
-                    plugins: {
-                      legend: { labels: { color: '#dbe3f0' } },
-                      tooltip: { enabled: true },
-                    },
-                  },
-                });
-              }
+              });
+            }
+            save();
+            renderProjectsUI();
+            renderChart();
+            renderKPIs();
+          } catch (err) {
+            console.warn('sync failed', err);
+          }
+        }
+        function onSignedOut() {
+          updateAuthUI(null);
+          const welcome = document.getElementById('welcomeText');
+          if (welcome) {
+            welcome.innerHTML =
+              'Простая система для фокуса: 25/5, длинный перерыв каждые 4 сета. Горячие клавиши: <b>Space</b> — старт/пауза, <b>R</b> — сброс, <b>1</b>/<b>2</b>/<b>3</b> — режимы.';
+          }
+        }
 
-              if (chartTabs) {
-                chartTabs.addEventListener('click', (e) => {
-                  const b = e.target.closest('button.tab');
-                  if (!b) return;
-                  chartTabs
-                    .querySelectorAll('.tab')
-                    .forEach((x) => x.classList.remove('active'));
-                  b.classList.add('active');
-                  renderChart(b.dataset.range);
-                });
-              }
-              if (chartProjectSel) {
-                chartProjectSel.onchange = () => renderChart();
-              }
+        if (supa) {
+          supa.auth.getUser().then(({ data }) => {
+            const user = data?.user;
+            user ? onSignedIn(user) : onSignedOut();
+          });
+          supa.auth.onAuthStateChange((_evt, session) => {
+            const user = session?.user;
+            user ? onSignedIn(user) : onSignedOut();
+          });
+        } else {
+          updateAuthUI(null);
+          updateWelcome(null);
+        }
 
-              if (projectList) {
-                projectList.addEventListener('click', (e) => {
-                  const btn = e.target.closest('button');
-                  if (!btn) return;
-                  const action = btn.dataset.action,
-                    id = btn.dataset.id;
-                  if (action === 'delete') {
-                    deleteProject(id);
-                    return;
-                  }
-                  if (action === 'set-active') {
-                    state.activeProjectId = id;
-                    save();
-                    renderProjectsUI();
-                  }
-                });
-              }
+        async function pushProjectToCloud({ id, name }) {
+          if (!supa) return;
+          const u = (await supa.auth.getUser()).data.user;
+          if (!u) return;
+          await supa.from('projects').upsert({ id, user_id: u.id, name });
+        }
+        async function deleteProjectFromCloud(id) {
+          if (!supa) return;
+          const u = (await supa.auth.getUser()).data.user;
+          if (!u) return;
+          await supa.from('projects').delete().eq('id', id).eq('user_id', u.id);
+        }
 
-              // ===== Self-tests (quick regression)
-              (() => {
-                try {
-                  console.group('%cPomodoro self-tests', 'color:#7c5cff');
-                  console.assert(
-                    typeof state.settings.focus === 'number' &&
-                      state.settings.focus > 0,
-                    'focus setting'
-                  );
-                  console.assert(
-                    Array.isArray(state.projects) && state.projects.length >= 1,
-                    'projects exist'
-                  );
-                  console.assert(
-                    state.stats.project[state.activeProjectId],
-                    'active project stats exists'
-                  );
-                  const d1 = getSeries('day', '__all__');
-                  console.assert(d1.data.length === 24, 'day len');
-                  const d2 = getSeries('week', '__all__');
-                  console.assert(d2.data.length === 7, 'week len');
-                  const d3 = getSeries('month', '__all__');
-                  console.assert(d3.data.length === 30, 'month len');
-                  console.groupEnd();
-                } catch (err) {
-                  console.warn('Self-tests failed', err);
-                }
-              })();
+        async function pushStatsToCloud({ day, minutes, projectId }) {
+          if (!supa) return;
+          const u = (await supa.auth.getUser()).data.user;
+          if (!u) return;
+          const { data: rows, error: selErr } = await supa
+            .from('stats_by_day')
+            .select('minutes')
+            .eq('user_id', u.id)
+            .eq('day', day)
+            .eq('project_id', projectId || null)
+            .limit(1);
+          if (selErr) {
+            console.warn(selErr);
+            return;
+          }
+          const current = rows?.[0]?.minutes || 0;
+          const total = current + minutes;
+          const { error: upErr } = await supa.from('stats_by_day').upsert({
+            user_id: u.id,
+            project_id: projectId || null,
+            day,
+            minutes: total,
+          });
+          if (upErr) console.warn(upErr);
+        }
 
-              // ===== Init
-              render();
-              renderChart('day');
-              requestAnimationFrame(tick);
-            })();
+        async function pullProjectsFromCloud() {
+          if (!supa) return [];
+          const u = (await supa.auth.getUser()).data.user;
+          if (!u) return [];
+          const { data } = await supa
+            .from('projects')
+            .select('id,name')
+            .order('created_at', { ascending: true });
+          return data || [];
+        }
+        async function pullStatsFromCloud(days) {
+          if (!supa) return [];
+          const u = (await supa.auth.getUser()).data.user;
+          if (!u) return [];
+          const since = new Date();
+          since.setDate(since.getDate() - (days || 60));
+          const { data } = await supa
+            .from('stats_by_day')
+            .select('day,minutes,project_id')
+            .gte('day', since.toISOString().slice(0, 10));
+          return data || [];
+        }
+
+        // ===== Chart helpers & data series
+        let chart,
+          chartRange = 'day';
+        function getLastNDates(n) {
+          const res = [];
+          const base = new Date();
+          for (let i = n - 1; i >= 0; i--) {
+            const d = new Date(base);
+            d.setDate(base.getDate() - i);
+            res.push(d.toISOString().slice(0, 10));
+          }
+          return res;
+        }
+        function getSeries(range, projectId) {
+          const n = range === 'week' ? 7 : 30;
+          const days = getLastNDates(n);
+          const labels = days.map((d) => d.slice(5));
+          const data = days.map((d) =>
+            projectId && projectId !== '__all__'
+              ? state.stats.project[projectId]?.history?.[d] || 0
+              : state.stats.history[d] || 0
+          );
+          return { labels, data };
+        }
+        function renderChart(range = chartRange) {
+          chartRange = range;
+          const pid = chartProjectSel?.value || '__all__';
+          const { labels, data } = getSeries(range, pid);
+          const ds = {
+            label:
+              pid === '__all__'
+                ? 'Минуты фокуса (все проекты)'
+                : 'Минуты фокуса',
+            data,
+            borderWidth: 1,
+            backgroundColor: 'rgba(124,92,255,0.6)',
+            borderColor: 'rgba(124,92,255,1)',
+            borderRadius: 4,
+          };
+          if (chart) {
+            chart.config.type = 'bar';
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = data;
+            chart.data.datasets[0].label = ds.label;
+            chart.update();
+            return;
+          }
+          chart = new Chart(chartCanvas, {
+            type: 'bar',
+            data: { labels, datasets: [ds] },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                x: {
+                  grid: { color: 'rgba(255,255,255,.05)' },
+                  ticks: { color: '#a9b5c7' },
+                },
+                y: {
+                  beginAtZero: true,
+                  grid: { color: 'rgba(255,255,255,.07)' },
+                  ticks: { color: '#a9b5c7' },
+                },
+              },
+              plugins: {
+                legend: { labels: { color: '#dbe3f0' } },
+                tooltip: { enabled: true },
+              },
+            },
+          });
+        }
+
+        if (chartTabs) {
+          chartTabs.addEventListener('click', (e) => {
+            const b = e.target.closest('button.tab');
+            if (!b) return;
+            chartTabs
+              .querySelectorAll('.tab')
+              .forEach((x) => x.classList.remove('active'));
+            b.classList.add('active');
+            renderChart(b.dataset.range);
+          });
+        }
+        if (chartProjectSel) {
+          chartProjectSel.onchange = () => renderChart();
+        }
+
+        if (projectList) {
+          projectList.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            const action = btn.dataset.action,
+              id = btn.dataset.id;
+            if (action === 'delete') {
+              deleteProject(id);
+              return;
+            }
+            if (action === 'set-active') {
+              state.activeProjectId = id;
+              save();
+              renderProjectsUI();
+            }
+          });
+        }
+
+        // ===== Self-tests (quick regression)
+        (() => {
+          try {
+            console.group('%cPomodoro self-tests', 'color:#7c5cff');
+            console.assert(
+              typeof state.settings.focus === 'number' &&
+                state.settings.focus > 0,
+              'focus setting'
+            );
+            console.assert(
+              Array.isArray(state.projects) && state.projects.length >= 1,
+              'projects exist'
+            );
+            console.assert(
+              state.stats.project[state.activeProjectId],
+              'active project stats exists'
+            );
+            const d1 = getSeries('day', '__all__');
+            console.assert(d1.data.length === 24, 'day len');
+            const d2 = getSeries('week', '__all__');
+            console.assert(d2.data.length === 7, 'week len');
+            const d3 = getSeries('month', '__all__');
+            console.assert(d3.data.length === 30, 'month len');
+            console.groupEnd();
+          } catch (err) {
+            console.warn('Self-tests failed', err);
+          }
+        })();
+
+        // ===== Init
+        render();
+        renderChart('week');
+        requestAnimationFrame(tick);
+      })();
+
+      // ===== Мини-виджет Pomodoro
+      const widget = document.getElementById('miniWidget');
+      const widgetTime = document.getElementById('widgetTime');
+      const widgetStatus = document.getElementById('widgetStatus');
+      const widgetToggle = document.getElementById('widgetToggle');
+
+      // показываем виджет при запуске
+      widget.classList.remove('hidden');
+
+      // обновление времени и статуса
+      function updateWidget() {
+        widgetTime.textContent = timeEl.textContent;
+        widgetStatus.textContent =
+          state.mode === 'focus'
+            ? 'Фокус'
+            : state.mode === 'short'
+            ? 'Перерыв'
+            : 'Длинный';
+        widgetToggle.textContent = state.running ? '⏸️' : '▶️';
+      }
+      setInterval(updateWidget, 500);
+
+      // управление старт/пауза
+      widgetToggle.onclick = () => {
+        state.running ? pause() : start();
+        updateWidget();
+      };
+
+      // перетаскивание виджета мышкой
+      (function enableDrag(el) {
+        let isDragging = false,
+          offsetX,
+          offsetY;
+        const header = document.getElementById('widgetHeader');
+        header.addEventListener('mousedown', (e) => {
+          isDragging = true;
+          offsetX = e.clientX - el.getBoundingClientRect().left;
+          offsetY = e.clientY - el.getBoundingClientRect().top;
+        });
+        window.addEventListener('mousemove', (e) => {
+          if (!isDragging) return;
+          el.style.left = `${e.clientX - offsetX}px`;
+          el.style.top = `${e.clientY - offsetY}px`;
+          el.style.bottom = 'auto';
+          el.style.right = 'auto';
+        });
+        window.addEventListener('mouseup', () => (isDragging = false));
+      })(widget);
     </script>
+    <div id="miniWidget" class="widget hidden">
+      <div id="widgetHeader">
+        <span id="widgetStatus">Фокус</span>
+        <button id="widgetToggle">⏸️</button>
+      </div>
+      <div id="widgetTime">25:00</div>
+    </div>
   </body>
 </html>

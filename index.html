@@ -394,6 +394,81 @@
         font-size: 24px;
         font-weight: 700;
         text-align: center;
+        /* ===== Modern big pretty range slider ===== */
+        input[type='range'] {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 320px; /* 👈 теперь длиннее */
+          height: 16px; /* чуть толще трек */
+          background: linear-gradient(
+            90deg,
+            rgba(124, 92, 255, 0.9),
+            rgba(124, 92, 255, 0.5)
+          );
+          border-radius: 999px;
+          outline: none;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          cursor: pointer;
+          box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
+          transition: box-shadow 0.2s ease;
+        }
+
+        input[type='range']:hover {
+          box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45),
+            0 0 0 2px rgba(124, 92, 255, 0.25);
+        }
+
+        input[type='range']::-webkit-slider-runnable-track {
+          height: 16px;
+          border-radius: 999px;
+          background: transparent;
+        }
+
+        input[type='range']::-moz-range-track {
+          height: 16px;
+          border-radius: 999px;
+          background: transparent;
+        }
+
+        input[type='range']::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 26px; /* 👈 крупный бегунок */
+          height: 26px;
+          border-radius: 50%;
+          background: white;
+          border: 2px solid #7c5cff;
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+          margin-top: -5px;
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        input[type='range']::-webkit-slider-thumb:hover {
+          transform: scale(1.15);
+          box-shadow: 0 8px 24px rgba(124, 92, 255, 0.5);
+        }
+
+        input[type='range']::-moz-range-thumb {
+          width: 26px;
+          height: 26px;
+          border-radius: 50%;
+          background: white;
+          border: 2px solid #7c5cff;
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        input[type='range']::-moz-range-thumb:hover {
+          transform: scale(1.15);
+          box-shadow: 0 8px 24px rgba(124, 92, 255, 0.5);
+        }
+        input[type='range'] {
+          background: linear-gradient(
+            90deg,
+            rgba(124, 92, 255, 0.9) var(--pos, 80%),
+            rgba(255, 255, 255, 0.08) var(--pos, 80%)
+          );
+        }
       }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -493,6 +568,30 @@
               <div class="switch">
                 <input id="soundOn" type="checkbox" checked />
                 <span>Звук по окончании</span>
+                <label
+                  style="
+                    display: grid;
+                    grid-template-columns: 1fr auto;
+                    gap: 12px;
+                    align-items: center;
+                  "
+                >
+                  <span>Громкость</span>
+                  <div style="display: flex; align-items: center; gap: 10px">
+                    <input
+                      id="soundVolume"
+                      type="range"
+                      min="0"
+                      max="100"
+                      value="80"
+                    />
+                    <span
+                      id="soundVolumeVal"
+                      style="min-width: 3ch; text-align: right"
+                      >80</span
+                    >
+                  </div>
+                </label>
               </div>
               <div class="switch">
                 <input id="notifyOn" type="checkbox" />
@@ -568,13 +667,44 @@
     <div id="miniWidget" class="widget">
       <div id="widgetHeader">
         <span id="widgetStatus">Фокус</span>
-        <button id="widgetToggle">⏸️</button>
+        <div>
+          <button id="widgetPin" title="Закрепить поверх (PiP)">📌</button>
+          <button id="widgetToggle">⏸️</button>
+        </div>
       </div>
       <div id="widgetTime">25:00</div>
     </div>
 
     <script>
       (() => {
+        // ===== Cross-tab/state sync для PiP =====
+const bc = new BroadcastChannel('pomodoro-sync');
+let pipWindow = null;
+
+// Отправка текущего состояния в канал
+function broadcastState() {
+  bc.postMessage({
+    type: 'state',
+    payload: {
+      remaining: state.remaining,
+      mode: state.mode,
+      running: state.running
+    }
+  });
+}
+
+// Обработка команд из PiP (toggle/start/pause/switch)
+bc.onmessage = (ev) => {
+  const msg = ev.data || {};
+  if (msg.type === 'cmd') {
+    if (msg.action === 'toggle') { state.running ? pause() : start(); }
+    if (msg.action === 'switch' && ['focus','short','long'].includes(msg.mode)) {
+      switchMode(msg.mode, true);
+    }
+  }
+};
+
+
         // ===== Cloud (Supabase) config
         const SUPABASE_URL = 'https://xilejbksbuexrncvtunb.supabase.co'; // <= замени
         const SUPABASE_ANON_KEY =
@@ -674,9 +804,9 @@
           });
 
           if (error) {
-            alert(error.message);
+            showToast('Ошибка: ' + error.message);
           } else {
-            alert('Проверь почту!');
+            showToast('Письмо отправлено. Проверь почту!');
             authMenu?.classList.add('hidden'); // спрятать меню
           }
         };
@@ -720,6 +850,7 @@
             autoNext: false,
             soundOn: true,
             notifyOn: false,
+            soundVolume: 0.8,
           },
           mode: 'focus',
           rounds: 1,
@@ -772,6 +903,8 @@
               project: {},
             };
           if (!state.stats.history) state.stats.history = {};
+          if (state.settings.soundVolume == null)
+            state.settings.soundVolume = 0.8;
           if (!state.stats.todayByHour)
             state.stats.todayByHour = Array.from({ length: 24 }, () => 0);
           if (
@@ -819,6 +952,8 @@
         const autoNext = $('#autoNext'),
           soundOn = $('#soundOn'),
           notifyOn = $('#notifyOn');
+        const soundVolume = document.getElementById('soundVolume');
+        const soundVolumeVal = document.getElementById('soundVolumeVal');
 
         const saveSettingsBtn = $('#saveSettings'),
           resetStatsBtn = $('#resetStats');
@@ -906,7 +1041,11 @@
           if (state.remaining <= 0) {
             state.remaining = 0;
             state.running = false;
-            onTimerEnd();
+            try {
+              onTimerEnd();
+            } catch (e) {
+              console.error('onTimerEnd error:', e);
+            }
           }
           renderTime();
           raf = requestAnimationFrame(tick);
@@ -919,6 +1058,7 @@
           statusEl.textContent = 'Идёт…';
           save();
           updateWidget();
+          broadcastState();
         }
         function pause() {
           state.running = false;
@@ -926,6 +1066,7 @@
           statusEl.textContent = 'Пауза';
           save();
           updateWidget();
+          broadcastState();
         }
 
         function onTimerEnd() {
@@ -963,6 +1104,7 @@
 
             state.rounds = (state.rounds % state.settings.roundsToLong) + 1;
             renderChart();
+            broadcastState();
           }
 
           if (state.settings.autoNext) {
@@ -1019,26 +1161,67 @@
         function beep() {
           try {
             const ac = getAC();
-            const o = ac.createOscillator();
-            const g = ac.createGain();
-            o.type = 'sine';
-            o.frequency.setValueAtTime(660, ac.currentTime);
 
-            // тихий старт -> короткий «пик»
-            g.gain.setValueAtTime(0.0001, ac.currentTime);
-            o.connect(g).connect(ac.destination);
-            g.gain.exponentialRampToValueAtTime(0.25, ac.currentTime + 0.02);
-            g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.5);
+            const master = ac.createGain();
+            const vol = Math.min(
+              1,
+              Math.max(0, state.settings.soundVolume ?? 0.8)
+            );
+            master.gain.setValueAtTime(0.0001, ac.currentTime);
+            master.connect(ac.destination);
 
-            o.start();
-            o.stop(ac.currentTime + 0.55);
+            let comp;
+            if (ac.createDynamicsCompressor) {
+              comp = ac.createDynamicsCompressor();
+              comp.threshold.setValueAtTime(-24, ac.currentTime);
+              comp.knee.setValueAtTime(20, ac.currentTime);
+              comp.ratio.setValueAtTime(6, ac.currentTime);
+              comp.attack.setValueAtTime(0.003, ac.currentTime);
+              comp.release.setValueAtTime(0.25, ac.currentTime);
+              comp.connect(master);
+            }
+
+            const out = comp || master;
+            const dur = 1.2; // сек
+            const t0 = ac.currentTime + 0.01;
+            const peak = 0.7 * vol;
+            const end = t0 + dur;
+
+            function mkOsc(freq, type = 'triangle', detune = 0) {
+              const o = ac.createOscillator();
+              const g = ac.createGain();
+              o.type = type;
+              o.frequency.setValueAtTime(freq, t0);
+              if (detune) o.detune.setValueAtTime(detune, t0);
+              g.gain.setValueAtTime(0.0001, t0);
+              g.gain.exponentialRampToValueAtTime(
+                Math.max(0.05, peak),
+                t0 + 0.03
+              );
+              g.gain.exponentialRampToValueAtTime(0.0008, end);
+              o.connect(g).connect(out);
+              o.start(t0);
+              o.stop(end);
+              return o;
+            }
+
+            const o1 = mkOsc(880, 'triangle', +8);
+            const o2 = mkOsc(660, 'triangle', -6);
+            o1.frequency.linearRampToValueAtTime(820, t0 + 0.25);
+
+            const bumpT = t0 + 0.35;
+            master.gain.cancelScheduledValues(t0);
+            master.gain.setValueAtTime(0.0001, t0);
+            master.gain.exponentialRampToValueAtTime(peak, t0 + 0.02);
+            master.gain.setTargetAtTime(peak * 0.6, t0 + 0.15, 0.15);
+            master.gain.setTargetAtTime(peak * 0.8, bumpT, 0.02);
+            master.gain.setTargetAtTime(0.001, end - 0.1, 0.08);
           } catch (e) {
-            // Фолбэк через HTMLAudio (если вдруг WebAudio запрещён)
             try {
-              // очень короткий «пик» в data URI (22050 Hz, 8-bit PCM — условно)
               const a = new Audio(
                 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAACABAAZGF0YQgAAAAAAP8A/wD/AAAA/wD/AP8AAAD/AAAA'
               );
+              a.volume = Math.min(1, state?.settings?.soundVolume ?? 0.8);
               a.play().catch(() => {});
             } catch (_) {}
           }
@@ -1066,6 +1249,7 @@
           const s = Math.ceil(state.remaining);
           timeEl.textContent = `${fmt(s / 60)}:${fmt(s % 60)}`;
           updateWidget(); // 🔄 обновляем виджет при каждом тике
+          broadcastState();
         }
 
         function renderKPIs() {
@@ -1172,6 +1356,23 @@
           autoNext.checked = state.settings.autoNext;
           soundOn.checked = state.settings.soundOn;
           notifyOn.checked = state.settings.notifyOn;
+          if (soundVolume) {
+            soundVolume.value = Math.round(state.settings.soundVolume * 100);
+            if (soundVolumeVal) soundVolumeVal.textContent = soundVolume.value;
+          }
+          if (soundVolume) {
+            soundVolume.addEventListener('input', () => {
+              if (soundVolumeVal)
+                soundVolumeVal.textContent = soundVolume.value;
+            });
+            soundVolume.addEventListener('input', () => {
+              if (soundVolumeVal)
+                soundVolumeVal.textContent = soundVolume.value;
+              const percent = soundVolume.value + '%';
+              soundVolume.style.setProperty('--pos', percent);
+            });
+          }
+
           renderTabs();
           renderTime();
           renderRound();
@@ -1262,6 +1463,11 @@
             s = Math.max(1, +shortMins.value | 0),
             l = Math.max(1, +longMins.value | 0),
             r = Math.max(2, +roundsToLong.value | 0);
+          const vol = Math.max(
+            0,
+            Math.min(1, +(soundVolume?.value || 80) / 100)
+          );
+
           state.settings = {
             focus: f,
             short: s,
@@ -1270,6 +1476,7 @@
             autoNext: autoNext.checked,
             soundOn: soundOn.checked,
             notifyOn: notifyOn.checked,
+            soundVolume: vol,
           };
           if (state.mode === 'focus') state.remaining = f * 60;
           if (state.mode === 'short') state.remaining = s * 60;
@@ -1633,6 +1840,103 @@
         const widgetTime = document.getElementById('widgetTime');
         const widgetStatus = document.getElementById('widgetStatus');
         const widgetToggle = document.getElementById('widgetToggle');
+
+
+        // ===== Document Picture-in-Picture =====
+async function openPip() {
+  // Проверка поддержки
+  if (!('documentPictureInPicture' in window)) {
+    alert('Ваш браузер не поддерживает Document Picture-in-Picture. Попробуйте Chrome/Edge.');
+    return;
+  }
+
+  // Создаём PiP-окно
+  pipWindow = await documentPictureInPicture.requestWindow({
+    width: 220,
+    height: 140
+  });
+
+  // Когда PiP закрывается — чистим ссылку
+  pipWindow.addEventListener('pagehide', () => { pipWindow = null; });
+
+  // Небольшой UI внутри PiP-окна
+  pipWindow.document.body.style.margin = '0';
+  pipWindow.document.body.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, Arial';
+  pipWindow.document.body.style.background = '#121a33';
+  pipWindow.document.body.style.color = '#e2e8f0';
+
+  pipWindow.document.body.innerHTML = `
+    <div id="pipRoot" style="padding:12px; width:100%; height:100%; box-sizing:border-box;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <strong id="pipStatus" style="font-size:14px;">Фокус</strong>
+        <div>
+          <button id="pipFocus" title="Фокус">🎯</button>
+          <button id="pipShort" title="Перерыв">☕</button>
+          <button id="pipLong"  title="Длинный">🕒</button>
+        </div>
+      </div>
+      <div id="pipTime" style="font-size:28px; font-weight:800; text-align:center;">25:00</div>
+      <div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">
+        <button id="pipToggle" style="padding:6px 10px; border-radius:8px; border:none; cursor:pointer;">▶️</button>
+      </div>
+    </div>
+  `;
+
+  // Стили для кнопок
+  Array.from(pipWindow.document.querySelectorAll('button')).forEach(b => {
+    b.style.background = '#0f1630';
+    b.style.color = '#dbe3f0';
+    b.style.border = '1px solid rgba(255,255,255,0.12)';
+    b.style.borderRadius = '8px';
+    b.style.cursor = 'pointer';
+    b.onmouseenter = () => b.style.background = '#192447';
+    b.onmouseleave = () => b.style.background = '#0f1630';
+  });
+
+  // Команды из PiP — в основной канал
+  pipWindow.document.getElementById('pipToggle').onclick = () => {
+    bc.postMessage({ type: 'cmd', action: 'toggle' });
+  };
+  pipWindow.document.getElementById('pipFocus').onclick = () => {
+    bc.postMessage({ type: 'cmd', action: 'switch', mode: 'focus' });
+  };
+  pipWindow.document.getElementById('pipShort').onclick = () => {
+    bc.postMessage({ type: 'cmd', action: 'switch', mode: 'short' });
+  };
+  pipWindow.document.getElementById('pipLong').onclick = () => {
+    bc.postMessage({ type: 'cmd', action: 'switch', mode: 'long' });
+  };
+
+  // Обновление данных в PiP
+  function renderPip(payload) {
+    if (!pipWindow) return;
+    const t = pipWindow.document.getElementById('pipTime');
+    const s = pipWindow.document.getElementById('pipStatus');
+    const toggle = pipWindow.document.getElementById('pipToggle');
+    if (!t || !s || !toggle) return;
+
+    const secs = Math.ceil(payload.remaining ?? 0);
+    const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+    const ss = String(secs % 60).padStart(2, '0');
+    t.textContent = `${mm}:${ss}`;
+    s.textContent = payload.mode === 'focus' ? 'Фокус' : payload.mode === 'short' ? 'Перерыв' : 'Длинный';
+    toggle.textContent = payload.running ? '⏸️' : '▶️';
+  }
+
+  // Слушаем канал внутри PiP и отрисовываем
+  const pipChannel = new BroadcastChannel('pomodoro-sync');
+  pipChannel.onmessage = (ev) => {
+    const msg = ev.data || {};
+    if (msg.type === 'state') renderPip(msg.payload || {});
+  };
+
+  // Инициализируем стартовым состоянием
+  renderPip({ remaining: state.remaining, mode: state.mode, running: state.running });
+}
+
+// Кнопка "📌" в основном виджете
+document.getElementById('widgetPin')?.addEventListener('click', openPip);
+
 
         function updateWidget() {
           if (!widget) return;

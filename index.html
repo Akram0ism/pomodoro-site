@@ -678,32 +678,36 @@
     <script>
       (() => {
         // ===== Cross-tab/state sync для PiP =====
-const bc = new BroadcastChannel('pomodoro-sync');
-let pipWindow = null;
+        const bc = new BroadcastChannel('pomodoro-sync');
+        let pipWindow = null;
 
-// Отправка текущего состояния в канал
-function broadcastState() {
-  bc.postMessage({
-    type: 'state',
-    payload: {
-      remaining: state.remaining,
-      mode: state.mode,
-      running: state.running
-    }
-  });
-}
+        // Отправка текущего состояния в канал
+        function broadcastState() {
+          bc.postMessage({
+            type: 'state',
+            payload: {
+              remaining: state.remaining,
+              mode: state.mode,
+              running: state.running,
+            },
+          });
+        }
 
-// Обработка команд из PiP (toggle/start/pause/switch)
-bc.onmessage = (ev) => {
-  const msg = ev.data || {};
-  if (msg.type === 'cmd') {
-    if (msg.action === 'toggle') { state.running ? pause() : start(); }
-    if (msg.action === 'switch' && ['focus','short','long'].includes(msg.mode)) {
-      switchMode(msg.mode, true);
-    }
-  }
-};
-
+        // Обработка команд из PiP (toggle/start/pause/switch)
+        bc.onmessage = (ev) => {
+          const msg = ev.data || {};
+          if (msg.type === 'cmd') {
+            if (msg.action === 'toggle') {
+              state.running ? pause() : start();
+            }
+            if (
+              msg.action === 'switch' &&
+              ['focus', 'short', 'long'].includes(msg.mode)
+            ) {
+              switchMode(msg.mode, true);
+            }
+          }
+        };
 
         // ===== Cloud (Supabase) config
         const SUPABASE_URL = 'https://xilejbksbuexrncvtunb.supabase.co'; // <= замени
@@ -1070,62 +1074,68 @@ bc.onmessage = (ev) => {
         }
 
         function onTimerEnd() {
-          statusEl.textContent = 'Готов';
-          notify('Время вышло', labelFor(state.mode));
-          if (state.settings.soundOn) beep();
-          if (state.mode === 'focus') {
-            // считаем, сколько реально прошло минут
-            const totalSecs = MODES.find((m) => m.id === 'focus').secs;
-            const doneSecs = totalSecs - state.remaining;
-            const addMin = +(doneSecs / 60).toFixed(1); // до десятых долей минуты
+  statusEl.textContent = 'Готов';
+  notify('Время вышло', labelFor(state.mode));
+  if (state.settings.soundOn) beep();
 
-            state.stats.todayFocusMin += addMin;
-            state.stats.totalFocusMin += addMin;
-            state.stats.setsDone += 1;
+  // === Обновляем статистику, если это был фокус ===
+  if (state.mode === 'focus') {
+    const addMin = Math.round(MODES[0].secs / 60);
+    state.stats.todayFocusMin += addMin;
+    state.stats.totalFocusMin += addMin;
+    state.stats.setsDone += 1;
+    const d = nowISO();
+    state.stats.history[d] = (state.stats.history[d] || 0) + addMin;
+    const h = new Date().getHours();
+    state.stats.todayByHour[h] = (state.stats.todayByHour[h] || 0) + addMin;
+    const pid = state.activeProjectId;
+    const ps =
+      state.stats.project[pid] ||
+      (state.stats.project[pid] = {
+        total: 0,
+        history: {},
+        todayByHour: Array.from({ length: 24 }, () => 0),
+      });
+    ps.total += addMin;
+    ps.history[d] = (ps.history[d] || 0) + addMin;
+    ps.todayByHour[h] = (ps.todayByHour[h] || 0) + addMin;
+    state.rounds = (state.rounds % state.settings.roundsToLong) + 1;
+    renderChart();
+  }
 
-            const d = nowISO();
-            state.stats.history[d] = (state.stats.history[d] || 0) + addMin;
+  // === Определяем следующий режим ===
+  let nextMode;
+  if (state.mode === 'focus') {
+    nextMode =
+      (state.rounds - 1) % state.settings.roundsToLong === 0
+        ? 'long'
+        : 'short';
+  } else {
+    nextMode = 'focus';
+  }
 
-            const h = new Date().getHours();
-            state.stats.todayByHour[h] =
-              (state.stats.todayByHour[h] || 0) + addMin;
+  state.mode = nextMode;
+  state.remaining = MODES.find((m) => m.id === nextMode).secs;
 
-            const pid = state.activeProjectId;
-            const ps =
-              state.stats.project[pid] ||
-              (state.stats.project[pid] = {
-                total: 0,
-                history: {},
-                todayByHour: Array.from({ length: 24 }, () => 0),
-              });
-            ps.total += addMin;
-            ps.history[d] = (ps.history[d] || 0) + addMin;
-            ps.todayByHour[h] = (ps.todayByHour[h] || 0) + addMin;
+  // === Проверяем автостарт ===
+  if (state.settings.autoNext) {
+    state.running = true;
+    startBtn.textContent = 'Пауза';
+    statusEl.textContent = 'Идёт…';
+  } else {
+    state.running = false;
+    startBtn.textContent = 'Старт';
+    statusEl.textContent = 'Готов';
+  }
 
-            state.rounds = (state.rounds % state.settings.roundsToLong) + 1;
-            renderChart();
-            broadcastState();
-          }
+  renderTabs();
+  renderTime();
+  renderKPIs();
+  renderRound();
+  save();
+  broadcastState();
+}
 
-          if (state.settings.autoNext) {
-            if (state.mode === 'focus')
-              state.mode =
-                (state.rounds - 1) % state.settings.roundsToLong === 0
-                  ? 'long'
-                  : 'short';
-            else state.mode = 'focus';
-            state.remaining = MODES.find((m) => m.id === state.mode).secs;
-            state.running = true;
-            startBtn.textContent = 'Пауза';
-          }
-          save();
-          renderKPIs();
-          renderRound();
-          // push to cloud (best-effort)
-          pushStatsToCloud({ day: d, minutes: addMin, projectId: pid }).catch(
-            () => {}
-          );
-        }
         // ===== Audio unlock & shared context
         let __ac; // shared AudioContext
         function getAC() {
@@ -1841,31 +1851,35 @@ bc.onmessage = (ev) => {
         const widgetStatus = document.getElementById('widgetStatus');
         const widgetToggle = document.getElementById('widgetToggle');
 
-
         // ===== Document Picture-in-Picture =====
-async function openPip() {
-  // Проверка поддержки
-  if (!('documentPictureInPicture' in window)) {
-    alert('Ваш браузер не поддерживает Document Picture-in-Picture. Попробуйте Chrome/Edge.');
-    return;
-  }
+        async function openPip() {
+          // Проверка поддержки
+          if (!('documentPictureInPicture' in window)) {
+            alert(
+              'Ваш браузер не поддерживает Document Picture-in-Picture. Попробуйте Chrome/Edge.'
+            );
+            return;
+          }
 
-  // Создаём PiP-окно
-  pipWindow = await documentPictureInPicture.requestWindow({
-    width: 220,
-    height: 140
-  });
+          // Создаём PiP-окно
+          pipWindow = await documentPictureInPicture.requestWindow({
+            width: 220,
+            height: 140,
+          });
 
-  // Когда PiP закрывается — чистим ссылку
-  pipWindow.addEventListener('pagehide', () => { pipWindow = null; });
+          // Когда PiP закрывается — чистим ссылку
+          pipWindow.addEventListener('pagehide', () => {
+            pipWindow = null;
+          });
 
-  // Небольшой UI внутри PiP-окна
-  pipWindow.document.body.style.margin = '0';
-  pipWindow.document.body.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, Arial';
-  pipWindow.document.body.style.background = '#121a33';
-  pipWindow.document.body.style.color = '#e2e8f0';
+          // Небольшой UI внутри PiP-окна
+          pipWindow.document.body.style.margin = '0';
+          pipWindow.document.body.style.fontFamily =
+            'system-ui, -apple-system, Segoe UI, Roboto, Arial';
+          pipWindow.document.body.style.background = '#121a33';
+          pipWindow.document.body.style.color = '#e2e8f0';
 
-  pipWindow.document.body.innerHTML = `
+          pipWindow.document.body.innerHTML = `
     <div id="pipRoot" style="padding:12px; width:100%; height:100%; box-sizing:border-box;">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
         <strong id="pipStatus" style="font-size:14px;">Фокус</strong>
@@ -1882,61 +1896,73 @@ async function openPip() {
     </div>
   `;
 
-  // Стили для кнопок
-  Array.from(pipWindow.document.querySelectorAll('button')).forEach(b => {
-    b.style.background = '#0f1630';
-    b.style.color = '#dbe3f0';
-    b.style.border = '1px solid rgba(255,255,255,0.12)';
-    b.style.borderRadius = '8px';
-    b.style.cursor = 'pointer';
-    b.onmouseenter = () => b.style.background = '#192447';
-    b.onmouseleave = () => b.style.background = '#0f1630';
-  });
+          // Стили для кнопок
+          Array.from(pipWindow.document.querySelectorAll('button')).forEach(
+            (b) => {
+              b.style.background = '#0f1630';
+              b.style.color = '#dbe3f0';
+              b.style.border = '1px solid rgba(255,255,255,0.12)';
+              b.style.borderRadius = '8px';
+              b.style.cursor = 'pointer';
+              b.onmouseenter = () => (b.style.background = '#192447');
+              b.onmouseleave = () => (b.style.background = '#0f1630');
+            }
+          );
 
-  // Команды из PiP — в основной канал
-  pipWindow.document.getElementById('pipToggle').onclick = () => {
-    bc.postMessage({ type: 'cmd', action: 'toggle' });
-  };
-  pipWindow.document.getElementById('pipFocus').onclick = () => {
-    bc.postMessage({ type: 'cmd', action: 'switch', mode: 'focus' });
-  };
-  pipWindow.document.getElementById('pipShort').onclick = () => {
-    bc.postMessage({ type: 'cmd', action: 'switch', mode: 'short' });
-  };
-  pipWindow.document.getElementById('pipLong').onclick = () => {
-    bc.postMessage({ type: 'cmd', action: 'switch', mode: 'long' });
-  };
+          // Команды из PiP — в основной канал
+          pipWindow.document.getElementById('pipToggle').onclick = () => {
+            bc.postMessage({ type: 'cmd', action: 'toggle' });
+          };
+          pipWindow.document.getElementById('pipFocus').onclick = () => {
+            bc.postMessage({ type: 'cmd', action: 'switch', mode: 'focus' });
+          };
+          pipWindow.document.getElementById('pipShort').onclick = () => {
+            bc.postMessage({ type: 'cmd', action: 'switch', mode: 'short' });
+          };
+          pipWindow.document.getElementById('pipLong').onclick = () => {
+            bc.postMessage({ type: 'cmd', action: 'switch', mode: 'long' });
+          };
 
-  // Обновление данных в PiP
-  function renderPip(payload) {
-    if (!pipWindow) return;
-    const t = pipWindow.document.getElementById('pipTime');
-    const s = pipWindow.document.getElementById('pipStatus');
-    const toggle = pipWindow.document.getElementById('pipToggle');
-    if (!t || !s || !toggle) return;
+          // Обновление данных в PiP
+          function renderPip(payload) {
+            if (!pipWindow) return;
+            const t = pipWindow.document.getElementById('pipTime');
+            const s = pipWindow.document.getElementById('pipStatus');
+            const toggle = pipWindow.document.getElementById('pipToggle');
+            if (!t || !s || !toggle) return;
 
-    const secs = Math.ceil(payload.remaining ?? 0);
-    const mm = String(Math.floor(secs / 60)).padStart(2, '0');
-    const ss = String(secs % 60).padStart(2, '0');
-    t.textContent = `${mm}:${ss}`;
-    s.textContent = payload.mode === 'focus' ? 'Фокус' : payload.mode === 'short' ? 'Перерыв' : 'Длинный';
-    toggle.textContent = payload.running ? '⏸️' : '▶️';
-  }
+            const secs = Math.ceil(payload.remaining ?? 0);
+            const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+            const ss = String(secs % 60).padStart(2, '0');
+            t.textContent = `${mm}:${ss}`;
+            s.textContent =
+              payload.mode === 'focus'
+                ? 'Фокус'
+                : payload.mode === 'short'
+                ? 'Перерыв'
+                : 'Длинный';
+            toggle.textContent = payload.running ? '⏸️' : '▶️';
+          }
 
-  // Слушаем канал внутри PiP и отрисовываем
-  const pipChannel = new BroadcastChannel('pomodoro-sync');
-  pipChannel.onmessage = (ev) => {
-    const msg = ev.data || {};
-    if (msg.type === 'state') renderPip(msg.payload || {});
-  };
+          // Слушаем канал внутри PiP и отрисовываем
+          const pipChannel = new BroadcastChannel('pomodoro-sync');
+          pipChannel.onmessage = (ev) => {
+            const msg = ev.data || {};
+            if (msg.type === 'state') renderPip(msg.payload || {});
+          };
 
-  // Инициализируем стартовым состоянием
-  renderPip({ remaining: state.remaining, mode: state.mode, running: state.running });
-}
+          // Инициализируем стартовым состоянием
+          renderPip({
+            remaining: state.remaining,
+            mode: state.mode,
+            running: state.running,
+          });
+        }
 
-// Кнопка "📌" в основном виджете
-document.getElementById('widgetPin')?.addEventListener('click', openPip);
-
+        // Кнопка "📌" в основном виджете
+        document
+          .getElementById('widgetPin')
+          ?.addEventListener('click', openPip);
 
         function updateWidget() {
           if (!widget) return;

@@ -83,20 +83,24 @@
         height: 100%;
       }
       body {
-        margin: 0;
-        font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu,
-          Cantarell, Noto Sans, Helvetica, Arial;
-        color: var(--fg);
-        background: radial-gradient(
-            1200px 800px at 75% -10%,
-            #192247,
-            transparent 60%
-          ),
-          var(--bg);
-        display: grid;
-        place-items: center;
-        padding: 20px;
-      }
+  margin: 0;
+  font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu,
+    Cantarell, Noto Sans, Helvetica, Arial;
+  color: var(--fg);
+
+  /* Исправленный стабильный фон */
+  background:
+    radial-gradient(1200px 800px at 75% -10%, #192247, transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  background-size: cover;
+
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
       .container {
         width: min(1080px, 100%);
       }
@@ -1074,67 +1078,68 @@
         }
 
         function onTimerEnd() {
-  statusEl.textContent = 'Готов';
-  notify('Время вышло', labelFor(state.mode));
-  if (state.settings.soundOn) beep();
+          statusEl.textContent = 'Готов';
+          notify('Время вышло', labelFor(state.mode));
+          if (state.settings.soundOn) beep();
 
-  // === Обновляем статистику, если это был фокус ===
-  if (state.mode === 'focus') {
-    const addMin = Math.round(MODES[0].secs / 60);
-    state.stats.todayFocusMin += addMin;
-    state.stats.totalFocusMin += addMin;
-    state.stats.setsDone += 1;
-    const d = nowISO();
-    state.stats.history[d] = (state.stats.history[d] || 0) + addMin;
-    const h = new Date().getHours();
-    state.stats.todayByHour[h] = (state.stats.todayByHour[h] || 0) + addMin;
-    const pid = state.activeProjectId;
-    const ps =
-      state.stats.project[pid] ||
-      (state.stats.project[pid] = {
-        total: 0,
-        history: {},
-        todayByHour: Array.from({ length: 24 }, () => 0),
-      });
-    ps.total += addMin;
-    ps.history[d] = (ps.history[d] || 0) + addMin;
-    ps.todayByHour[h] = (ps.todayByHour[h] || 0) + addMin;
-    state.rounds = (state.rounds % state.settings.roundsToLong) + 1;
-    renderChart();
-  }
+          // === Обновляем статистику, если это был фокус ===
+          if (state.mode === 'focus') {
+            const addMin = Math.round(MODES[0].secs / 60);
+            state.stats.todayFocusMin += addMin;
+            state.stats.totalFocusMin += addMin;
+            state.stats.setsDone += 1;
+            const d = nowISO();
+            state.stats.history[d] = (state.stats.history[d] || 0) + addMin;
+            const h = new Date().getHours();
+            state.stats.todayByHour[h] =
+              (state.stats.todayByHour[h] || 0) + addMin;
+            const pid = state.activeProjectId;
+            const ps =
+              state.stats.project[pid] ||
+              (state.stats.project[pid] = {
+                total: 0,
+                history: {},
+                todayByHour: Array.from({ length: 24 }, () => 0),
+              });
+            ps.total += addMin;
+            ps.history[d] = (ps.history[d] || 0) + addMin;
+            ps.todayByHour[h] = (ps.todayByHour[h] || 0) + addMin;
+            state.rounds = (state.rounds % state.settings.roundsToLong) + 1;
+            renderChart();
+          }
 
-  // === Определяем следующий режим ===
-  let nextMode;
-  if (state.mode === 'focus') {
-    nextMode =
-      (state.rounds - 1) % state.settings.roundsToLong === 0
-        ? 'long'
-        : 'short';
-  } else {
-    nextMode = 'focus';
-  }
+          // === Определяем следующий режим ===
+          let nextMode;
+          if (state.mode === 'focus') {
+            nextMode =
+              (state.rounds - 1) % state.settings.roundsToLong === 0
+                ? 'long'
+                : 'short';
+          } else {
+            nextMode = 'focus';
+          }
 
-  state.mode = nextMode;
-  state.remaining = MODES.find((m) => m.id === nextMode).secs;
+          state.mode = nextMode;
+          state.remaining = MODES.find((m) => m.id === nextMode).secs;
 
-  // === Проверяем автостарт ===
-  if (state.settings.autoNext) {
-    state.running = true;
-    startBtn.textContent = 'Пауза';
-    statusEl.textContent = 'Идёт…';
-  } else {
-    state.running = false;
-    startBtn.textContent = 'Старт';
-    statusEl.textContent = 'Готов';
-  }
+          // === Проверяем автостарт ===
+          if (state.settings.autoNext) {
+            state.running = true;
+            startBtn.textContent = 'Пауза';
+            statusEl.textContent = 'Идёт…';
+          } else {
+            state.running = false;
+            startBtn.textContent = 'Старт';
+            statusEl.textContent = 'Готов';
+          }
 
-  renderTabs();
-  renderTime();
-  renderKPIs();
-  renderRound();
-  save();
-  broadcastState();
-}
+          renderTabs();
+          renderTime();
+          renderKPIs();
+          renderRound();
+          save();
+          broadcastState();
+        }
 
         // ===== Audio unlock & shared context
         let __ac; // shared AudioContext

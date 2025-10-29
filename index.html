@@ -83,26 +83,29 @@
         height: 100%;
       }
       body {
-  margin: 0;
-  font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu,
-    Cantarell, Noto Sans, Helvetica, Arial;
-  color: var(--fg);
+        margin: 0;
+        font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu,
+          Cantarell, Noto Sans, Helvetica, Arial;
+        color: var(--fg);
 
-  /* Исправленный стабильный фон */
-  background:
-    radial-gradient(1200px 800px at 75% -10%, #192247, transparent 60%),
-    var(--bg);
-  background-attachment: fixed;
-  background-repeat: no-repeat;
-  background-size: cover;
+        background: var(--bg);
+        background-attachment: fixed;
+        background-repeat: no-repeat;
+        background-size: cover;
 
-  display: grid;
-  place-items: center;
-  padding: 20px;
-}
+        display: grid;
+        place-items: center;
+        padding: 20px;
+      
+        position: relative; /* создаём стек-контекст */
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
 
       .container {
         width: min(1080px, 100%);
+        position: relative;
+        z-index: 1; /* контент выше, чем body::before */
       }
       .grid {
         display: grid;
@@ -382,6 +385,54 @@
         z-index: 9999;
         user-select: none;
         transition: opacity 0.2s;
+        /* Красивый длинный ползунок громкости только для #soundVolume */
+#soundVolume {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 320px;               /* длиннее */
+  height: 16px;               /* толще дорожка */
+  background: linear-gradient(
+    90deg,
+    rgba(124, 92, 255, 0.9) var(--pos, 80%),
+    rgba(255, 255, 255, 0.08) var(--pos, 80%)
+  );
+  border-radius: 999px;
+  outline: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.35);
+  transition: box-shadow .2s ease;
+}
+#soundVolume:hover {
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.45),
+              0 0 0 2px rgba(124,92,255,.25);
+}
+#soundVolume::-webkit-slider-runnable-track { height: 16px; border-radius: 999px; background: transparent; }
+#soundVolume::-moz-range-track { height: 16px; border-radius: 999px; background: transparent; }
+#soundVolume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: #fff; border: 2px solid #7c5cff;
+  box-shadow: 0 6px 18px rgba(0,0,0,.4);
+  margin-top: -5px;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+#soundVolume::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 8px 24px rgba(124,92,255,.5);
+}
+#soundVolume::-moz-range-thumb {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: #fff; border: 2px solid #7c5cff;
+  box-shadow: 0 6px 18px rgba(0,0,0,.4);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+#soundVolume::-moz-range-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 8px 24px rgba(124,92,255,.5);
+}
+
       }
       .widget.hidden {
         display: none;
@@ -398,23 +449,7 @@
         font-size: 24px;
         font-weight: 700;
         text-align: center;
-        /* ===== Modern big pretty range slider ===== */
-        input[type='range'] {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 320px; /* 👈 теперь длиннее */
-          height: 16px; /* чуть толще трек */
-          background: linear-gradient(
-            90deg,
-            rgba(124, 92, 255, 0.9),
-            rgba(124, 92, 255, 0.5)
-          );
-          border-radius: 999px;
-          outline: none;
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          cursor: pointer;
-          box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
-          transition: box-shadow 0.2s ease;
+       
         }
 
         input[type='range']:hover {
@@ -473,6 +508,21 @@
             rgba(255, 255, 255, 0.08) var(--pos, 80%)
           );
         }
+      }
+      /* Фиксированный градиент поверх background: var(--bg), но под контентом */
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        z-index: 0; /* под контентом, над фоном body */
+        background: radial-gradient(
+          1200px 800px at 75% -10%,
+          #192247,
+          transparent 60%
+        );
+        background-repeat: no-repeat;
+        background-size: cover;
+        pointer-events: none;
       }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1084,6 +1134,7 @@
 
           // === Обновляем статистику, если это был фокус ===
           if (state.mode === 'focus') {
+            if (state.mode === 'focus' && !state._skipped) {
             const addMin = Math.round(MODES[0].secs / 60);
             state.stats.todayFocusMin += addMin;
             state.stats.totalFocusMin += addMin;
@@ -1105,9 +1156,9 @@
             ps.history[d] = (ps.history[d] || 0) + addMin;
             ps.todayByHour[h] = (ps.todayByHour[h] || 0) + addMin;
             state.rounds = (state.rounds % state.settings.roundsToLong) + 1;
-            renderChart();
+            renderChart();}
           }
-
+          state._skipped = false;
           // === Определяем следующий режим ===
           let nextMode;
           if (state.mode === 'focus') {
@@ -1399,6 +1450,7 @@
         // ===== Events
         startBtn.onclick = () => (state.running ? pause() : start());
         skipBtn.onclick = () => {
+          state._skipped = true;
           state.remaining = 0.01;
           save();
         };
@@ -1719,7 +1771,7 @@
 
         // ===== Chart helpers & data series
         let chart,
-          chartRange = 'day';
+          chartRange = 'week';
         function getLastNDates(n) {
           const res = [];
           const base = new Date();
@@ -1731,16 +1783,28 @@
           return res;
         }
         function getSeries(range, projectId) {
-          const n = range === 'week' ? 7 : 30;
-          const days = getLastNDates(n);
-          const labels = days.map((d) => d.slice(5));
-          const data = days.map((d) =>
-            projectId && projectId !== '__all__'
-              ? state.stats.project[projectId]?.history?.[d] || 0
-              : state.stats.history[d] || 0
-          );
-          return { labels, data };
-        }
+  if (range === 'day') {
+     // 24 часа: берём todayByHour
+     const hours = Array.from({ length: 24 }, (_, h) => h);
+     const labels = hours.map(h => String(h).padStart(2, '0'));
+     const data = hours.map(h => {
+       if (projectId && projectId !== '__all__') {
+         return state.stats.project[projectId]?.todayByHour?.[h] || 0;
+       }
+       return state.stats.todayByHour?.[h] || 0;
+     });
+     return { labels, data };
+   }
+   const n = range === 'week' ? 7 : 30;
+   const days = getLastNDates(n);
+   const labels = days.map((d) => d.slice(5));
+   const data = days.map((d) =>
+     projectId && projectId !== '__all__'
+       ? state.stats.project[projectId]?.history?.[d] || 0
+       : state.stats.history[d] || 0
+   );
+   return { labels, data };
+ }
         function renderChart(range = chartRange) {
           chartRange = range;
           const pid = chartProjectSel?.value || '__all__';

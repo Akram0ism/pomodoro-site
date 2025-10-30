@@ -147,6 +147,78 @@
   const authLoginBtn = document.getElementById('authLoginBtn');
   const authLogoutBtn = document.getElementById('authLogoutBtn');
   const authMenuEmail = document.getElementById('authMenuEmail');
+  const authPassInput = document.getElementById('authMenuPass');
+  const authSignupBtn  = document.getElementById('authSignupBtn');
+  const authGoogleBtn  = document.getElementById('authGoogleBtn');
+
+  // вспом: редирект назад на ту же страницу
+const REDIRECT_TO = location.origin + location.pathname;
+
+// Вход по email+пароль
+if (authLoginBtn) authLoginBtn.onclick = async () => {
+  if (!supa) return showToast('Supabase клиент не инициализирован');
+  const email = (authMenuEmail?.value || '').trim();
+  const password = (authPassInput?.value || '').trim();
+  if (!email || !password) { showToast('Введите e-mail и пароль'); return; }
+
+  const { data, error } = await supa.auth.signInWithPassword({ email, password });
+  if (error) return showToast('Ошибка входа: ' + error.message);
+
+  showToast('Вы вошли');
+  authMenu?.classList.add('hidden');
+};
+
+// Регистрация (e-mail + пароль)
+if (authSignupBtn) authSignupBtn.onclick = async () => {
+  if (!supa) return showToast('Supabase клиент не инициализирован');
+  const email = (authMenuEmail?.value || '').trim();
+  const password = (authPassInput?.value || '').trim();
+  if (!email || !password) { showToast('Задайте e-mail и пароль'); return; }
+  if (password.length < 6) { showToast('Пароль >= 6 символов'); return; }
+
+  const { data, error } = await supa.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: REDIRECT_TO,
+      // можно сохранить доп. поля профиля
+      data: { name: email.split('@')[0] }
+    },
+  });
+  if (error) return showToast('Ошибка регистрации: ' + error.message);
+
+  if (data.user?.identities?.length === 0) {
+    // такой пользователь уже есть
+    showToast('Пользователь уже существует. Попробуй «Войти».');
+  } else {
+    showToast('Письмо для подтверждения отправлено на почту');
+  }
+};
+
+// Вход через Google (OAuth)
+if (authGoogleBtn) authGoogleBtn.onclick = async () => {
+  if (!supa) return showToast('Supabase клиент не инициализирован');
+  const { data, error } = await supa.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: REDIRECT_TO,
+      queryParams: {
+        // подсказка выбора аккаунта
+        prompt: 'select_account',
+      },
+    },
+  });
+  if (error) showToast('Ошибка Google OAuth: ' + error.message);
+};
+
+// Логаут
+if (authLogoutBtn) authLogoutBtn.onclick = async () => {
+  await supa.auth.signOut();
+  authMenu?.classList.add('hidden');
+  showToast('Вы вышли');
+};
+
+
 
   authIcon.textContent = '👤'; // default
 
@@ -154,25 +226,15 @@
     authMenu.classList.toggle('hidden');
   };
 
-  authLoginBtn.onclick = async () => {
-    const email = (authMenuEmail?.value || '').trim();
-    if (!email) {
-      authMenuEmail?.focus();
-      return;
-    }
+// Enter в поле пароля = нажать "Войти"
+authPassInput?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') authLoginBtn?.click();
+});
 
-    const { error } = await supa.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: location.origin + location.pathname },
-    });
-
-    if (error) {
-      showToast('Ошибка: ' + error.message);
-    } else {
-      showToast('Письмо отправлено. Проверь почту!');
-      authMenu?.classList.add('hidden'); // спрятать меню
-    }
-  };
+// Показ/скрытие меню (если ещё не сделал вариант с бекдропом)
+authIcon.onclick = () => {
+  authMenu?.classList.toggle('hidden');
+};
 
   // запуск по Enter
   authMenuEmail?.addEventListener('keydown', (e) => {
@@ -186,20 +248,28 @@
 
   // Обновление UI при изменении статуса
   function updateAuthUI(user) {
+    if (!authIcon || !authEmailDisplay || !authLoginBtn || !authLogoutBtn) return;
+  
     if (user) {
       authIcon.textContent = '✅';
       authEmailDisplay.textContent = user.email;
       authLoginBtn.style.display = 'none';
       authLogoutBtn.style.display = 'block';
       authMenuEmail && (authMenuEmail.style.display = 'none');
+      authPassInput && (authPassInput.style.display = 'none');
+      authSignupBtn && (authSignupBtn.style.display = 'none');
+      authGoogleBtn && (authGoogleBtn.style.display = 'none');
     } else {
       authIcon.textContent = '👤';
       authEmailDisplay.textContent = 'Не вошли';
       authLoginBtn.style.display = 'block';
       authLogoutBtn.style.display = 'none';
+      authMenuEmail && (authMenuEmail.style.display = '');
+      authPassInput && (authPassInput.style.display = '');
+      authSignupBtn && (authSignupBtn.style.display = '');
+      authGoogleBtn && (authGoogleBtn.style.display = '');
     }
   }
-
   // ===== State & Persistence
   const LS_KEY = 'pomodoro.v2';
   const nowISO = () => new Date().toISOString().slice(0, 10);

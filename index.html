@@ -371,21 +371,7 @@
                     font-weight: 700;
                   }
 
-                  .widget {
-                    position: fixed;
-                    bottom: 20px;
-                    right: 20px;
-                    background: #121a33;
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    border-radius: 14px;
-                    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-                    padding: 10px 14px;
-                    width: 150px;
-                    color: #e2e8f0;
-                    z-index: 9999;
-                    user-select: none;
-                    transition: opacity 0.2s;
-                    /* Красивый длинный ползунок громкости только для #soundVolume */
+
             #soundVolume {
               -webkit-appearance: none;
               appearance: none;
@@ -732,17 +718,6 @@
       </div>
     </div>
 
-    <div id="miniWidget" class="widget">
-      <div id="widgetHeader">
-        <span id="widgetStatus">Фокус</span>
-        <div>
-          <button id="widgetPin" title="Закрепить поверх (PiP)">📌</button>
-          <button id="widgetToggle">⏸️</button>
-        </div>
-      </div>
-      <div id="widgetTime">25:00</div>
-    </div>
-
     <script>
       (() => {
         // ===== Cross-tab/state sync для PiP =====
@@ -818,15 +793,21 @@
           state.stats.history[d] = (state.stats.history[d] || 0) + min;
           state.stats.todayByHour[h] = (state.stats.todayByHour[h] || 0) + min;
 
-          const ps = state.stats.project[pid] || (state.stats.project[pid] = {
-            total: 0, history: {}, todayByHour: Array.from({ length: 24 }, () => 0)
-          });
+          const ps =
+            state.stats.project[pid] ||
+            (state.stats.project[pid] = {
+              total: 0,
+              history: {},
+              todayByHour: Array.from({ length: 24 }, () => 0),
+            });
           ps.total += min;
           ps.history[d] = (ps.history[d] || 0) + min;
           ps.todayByHour[h] = (ps.todayByHour[h] || 0) + min;
 
           // в облако (best-effort)
-          try { pushStatsToCloud({ day: d, minutes: min, projectId: pid }); } catch {}
+          try {
+            pushStatsToCloud({ day: d, minutes: min, projectId: pid });
+          } catch {}
         }
 
         const $ = (sel) => document.querySelector(sel);
@@ -1157,22 +1138,215 @@
           raf = requestAnimationFrame(tick);
         }
 
-        function start() {
-          getAC(); // гарантируем разблокировку
+        console.table({
+          https: location.protocol === 'https:',
+          topLevel: window.top === window,
+          hasAPI: 'documentPictureInPicture' in window,
+        });
+
+        async function start() {
+          getAC();
           state.running = true;
+
           startBtn.textContent = 'Пауза';
           statusEl.textContent = 'Идёт…';
           save();
-          updateWidget();
           broadcastState();
+
+          try {
+            if (!pipWindow && 'documentPictureInPicture' in window) {
+              pipWindow = await openPip(); // важно: openPip() возвращает окно
+            }
+          } catch (e) {
+            console.error('PiP failed:', e);
+            ensureOverlay(); // запасной вариант (см. п.3)
+          }
         }
+        // ===== Document Picture-in-Picture =====
+        async function openPip() {
+          if (!('documentPictureInPicture' in window)) {
+            console.warn('Document PiP не поддерживается');
+            return;
+          }
+          if (pipWindow) return; // уже открыто
+
+          pipWindow = await documentPictureInPicture.requestWindow({
+            width: 220,
+            height: 140,
+          });
+
+          // Когда PiP закрывается — чистим ссылку
+          pipWindow.addEventListener('pagehide', () => {
+            pipWindow = null;
+          });
+
+          // Мини-UI внутри PiP
+          pipWindow.document.body.style.margin = '0';
+          pipWindow.document.body.style.fontFamily =
+            'system-ui, -apple-system, Segoe UI, Roboto, Arial';
+          pipWindow.document.body.style.background = '#121a33';
+          pipWindow.document.body.style.color = '#e2e8f0';
+
+          pipWindow.document.body.innerHTML = `
+    <div id="pipRoot" style="padding:12px; width:100%; height:100%; box-sizing:border-box;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <strong id="pipStatus" style="font-size:14px;">Фокус</strong>
+        <div>
+          <button id="pipFocus" title="Фокус">🎯</button>
+          <button id="pipShort" title="Перерыв">☕</button>
+          <button id="pipLong"  title="Длинный">🕒</button>
+        </div>
+      </div>
+      <div id="pipTime" style="font-size:28px; font-weight:800; text-align:center;">25:00</div>
+      <div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">
+        <button id="pipToggle" style="padding:6px 10px; border-radius:8px; border:none; cursor:pointer;">▶️</button>
+      </div>
+    </div>
+  `;
+
+          Array.from(pipWindow.document.querySelectorAll('button')).forEach(
+            (b) => {
+              b.style.background = '#0f1630';
+              b.style.color = '#dbe3f0';
+              b.style.border = '1px solid rgba(255,255,255,0.12)';
+              b.style.borderRadius = '8px';
+              b.style.cursor = 'pointer';
+              b.onmouseenter = () => (b.style.background = '#192447');
+              b.onmouseleave = () => (b.style.background = '#0f1630');
+            }
+          );
+
+          // Команды из PiP — в основной канал
+          pipWindow.document.getElementById('pipToggle').onclick = () => {
+            bc.postMessage({ type: 'cmd', action: 'toggle' });
+          };
+          pipWindow.document.getElementById('pipFocus').onclick = () => {
+            bc.postMessage({ type: 'cmd', action: 'switch', mode: 'focus' });
+          };
+          pipWindow.document.getElementById('pipShort').onclick = () => {
+            bc.postMessage({ type: 'cmd', action: 'switch', mode: 'short' });
+          };
+          pipWindow.document.getElementById('pipLong').onclick = () => {
+            bc.postMessage({ type: 'cmd', action: 'switch', mode: 'long' });
+          };
+
+          // Обновление данных в PiP
+          function renderPip(payload) {
+            if (!pipWindow) return;
+            const t = pipWindow.document.getElementById('pipTime');
+            const s = pipWindow.document.getElementById('pipStatus');
+            const toggle = pipWindow.document.getElementById('pipToggle');
+            if (!t || !s || !toggle) return;
+
+            const secs = Math.ceil(payload.remaining ?? 0);
+            const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+            const ss = String(secs % 60).padStart(2, '0');
+            t.textContent = `${mm}:${ss}`;
+            s.textContent =
+              payload.mode === 'focus'
+                ? 'Фокус'
+                : payload.mode === 'short'
+                ? 'Перерыв'
+                : 'Длинный';
+            toggle.textContent = payload.running ? '⏸️' : '▶️';
+          }
+
+          // Слушаем канал внутри PiP и отрисовываем
+          const pipChannel = new BroadcastChannel('pomodoro-sync');
+          pipChannel.onmessage = (ev) => {
+            const msg = ev.data || {};
+            if (msg.type === 'state') renderPip(msg.payload || {});
+          };
+
+          // Инициализация
+          renderPip({
+            remaining: state.remaining,
+            mode: state.mode,
+            running: state.running,
+          });
+          return pipWindow; // <<< добавь эту строку
+        }
+
+        let overlayEl = null;
+
+        function ensureOverlay() {
+          if (overlayEl) return;
+          overlayEl = document.createElement('div');
+          overlayEl.style.cssText = `
+    position:fixed; right:16px; bottom:16px; z-index:9999;
+    background:#121a33; color:#e2e8f0; border:1px solid rgba(255,255,255,.12);
+    border-radius:12px; padding:10px 12px; width:180px; box-shadow:0 10px 30px rgba(0,0,0,.35);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+  `;
+          overlayEl.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <strong id="ovStatus" style="font-size:13px">Фокус</strong>
+      <button id="ovClose" title="Закрыть" style="background:#0f1630;border:1px solid rgba(255,255,255,.12);color:#dbe3f0;border-radius:8px;cursor:pointer;">×</button>
+    </div>
+    <div id="ovTime" style="font-size:26px;font-weight:800;text-align:center;">25:00</div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+      <button id="ovToggle" style="background:#0f1630;border:1px solid rgba(255,255,255,.12);color:#dbe3f0;border-radius:8px;cursor:pointer;padding:6px 10px;">▶️</button>
+      <button id="ovFocus"  title="Фокус"   style="background:#0f1630;border:1px solid rgba(255,255,255,.12);color:#dbe3f0;border-radius:8px;cursor:pointer;padding:6px 10px;">🎯</button>
+      <button id="ovShort"  title="Перерыв" style="background:#0f1630;border:1px solid rgba(255,255,255,.12);color:#dbe3f0;border-radius:8px;cursor:pointer;padding:6px 10px;">☕</button>
+      <button id="ovLong"   title="Длинный" style="background:#0f1630;border:1px solid rgba(255,255,255,.12);color:#dbe3f0;border-radius:8px;cursor:pointer;padding:6px 10px;">🕒</button>
+    </div>
+  `;
+          document.body.appendChild(overlayEl);
+
+          overlayEl.querySelector('#ovClose').onclick = () => {
+            overlayEl.remove();
+            overlayEl = null;
+          };
+          overlayEl.querySelector('#ovToggle').onclick = () => {
+            state.running ? pause() : start();
+            updateOverlay();
+          };
+          overlayEl.querySelector('#ovFocus').onclick = () => {
+            switchMode('focus', true);
+            updateOverlay();
+          };
+          overlayEl.querySelector('#ovShort').onclick = () => {
+            switchMode('short', true);
+            updateOverlay();
+          };
+          overlayEl.querySelector('#ovLong').onclick = () => {
+            switchMode('long', true);
+            updateOverlay();
+          };
+
+          updateOverlay();
+        }
+
+        function updateOverlay() {
+          if (!overlayEl) return;
+          const secs = Math.ceil(state.remaining);
+          const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+          const ss = String(secs % 60).padStart(2, '0');
+          overlayEl.querySelector('#ovTime').textContent = `${mm}:${ss}`;
+          overlayEl.querySelector('#ovStatus').textContent =
+            state.mode === 'focus'
+              ? 'Фокус'
+              : state.mode === 'short'
+              ? 'Перерыв'
+              : 'Длинный';
+          overlayEl.querySelector('#ovToggle').textContent = state.running
+            ? '⏸️'
+            : '▶️';
+        }
+
         function pause() {
           state.running = false;
+
           startBtn.textContent = 'Старт';
           statusEl.textContent = 'Пауза';
           save();
-          updateWidget();
           broadcastState();
+
+          // Закрыть PiP при паузе
+          if (pipWindow) {
+            pipWindow.close?.();
+            pipWindow = null;
+          }
         }
 
         function onTimerEnd() {
@@ -1358,12 +1532,13 @@
             ? 'Короткий перерыв'
             : 'Длинный перерыв';
         }
-
+        function updateWidget() {}
         // ===== Render helpers
         function renderTime() {
           const s = Math.ceil(state.remaining);
           timeEl.textContent = `${fmt(s / 60)}:${fmt(s % 60)}`;
           updateWidget(); // 🔄 обновляем виджет при каждом тике
+          updateOverlay();
           broadcastState();
         }
 
@@ -1410,107 +1585,115 @@
         }
 
         function renderProjectsUI() {
-  // --- activeProject <select>
-  activeProjectSel.innerHTML = '';
-  state.projects.forEach((p) => {
-    const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = p.name;
-    if (p.id === state.activeProjectId) opt.selected = true;
-    activeProjectSel.appendChild(opt);
-  });
-  // индикатор цвета активного проекта
-  const activeDot = document.getElementById('activeProjectDot');
-  if (activeDot) activeDot.style.background = getProjectColor(state.activeProjectId);
+          // --- activeProject <select>
+          activeProjectSel.innerHTML = '';
+          state.projects.forEach((p) => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name;
+            if (p.id === state.activeProjectId) opt.selected = true;
+            activeProjectSel.appendChild(opt);
+          });
+          // индикатор цвета активного проекта
+          const activeDot = document.getElementById('activeProjectDot');
+          if (activeDot)
+            activeDot.style.background = getProjectColor(state.activeProjectId);
 
-  // --- chartProject <select>
-  chartProjectSel.innerHTML = '';
-  const optAll = document.createElement('option');
-  optAll.value = '__all__';
-  optAll.textContent = 'Все проекты';
-  chartProjectSel.appendChild(optAll);
-  state.projects.forEach((p) => {
-    const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = p.name;
-    chartProjectSel.appendChild(opt);
-  });
-  if (!['__all__', ...state.projects.map((p) => p.id)].includes(chartProjectSel.value)) {
-    chartProjectSel.value = '__all__';
-  }
+          // --- chartProject <select>
+          chartProjectSel.innerHTML = '';
+          const optAll = document.createElement('option');
+          optAll.value = '__all__';
+          optAll.textContent = 'Все проекты';
+          chartProjectSel.appendChild(optAll);
+          state.projects.forEach((p) => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name;
+            chartProjectSel.appendChild(opt);
+          });
+          if (
+            !['__all__', ...state.projects.map((p) => p.id)].includes(
+              chartProjectSel.value
+            )
+          ) {
+            chartProjectSel.value = '__all__';
+          }
 
-  // --- список проектов (клик по названию/точке делает активным)
-  projectList.innerHTML = '';
-  state.projects.forEach((p) => {
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.style.justifyContent = 'space-between';
-    row.dataset.id = p.id;
+          // --- список проектов (клик по названию/точке делает активным)
+          projectList.innerHTML = '';
+          state.projects.forEach((p) => {
+            const row = document.createElement('div');
+            row.className = 'row';
+            row.style.justifyContent = 'space-between';
+            row.dataset.id = p.id;
 
-    const info = document.createElement('div');
-    info.style.cursor = 'pointer';
-    info.title = 'Сделать активным';
-    const dot = document.createElement('span');
-    dot.className = 'color-dot';
-    dot.style.background = p.color || '#7c5cff';
-    dot.title = p.color || '#7c5cff';
-    const nameEl = document.createElement('span');
-    nameEl.textContent = ' ' + p.name;
-    info.append(dot, nameEl);
+            const info = document.createElement('div');
+            info.style.cursor = 'pointer';
+            info.title = 'Сделать активным';
+            const dot = document.createElement('span');
+            dot.className = 'color-dot';
+            dot.style.background = p.color || '#7c5cff';
+            dot.title = p.color || '#7c5cff';
+            const nameEl = document.createElement('span');
+            nameEl.textContent = ' ' + p.name;
+            info.append(dot, nameEl);
 
-    // Клик по info — активирует проект
-    info.onclick = () => {
-      state.activeProjectId = p.id;
-      save();
-      renderProjectsUI();
-      renderChart(); // чтобы перекрасить график под цвет проекта
-    };
+            // Клик по info — активирует проект
+            info.onclick = () => {
+              state.activeProjectId = p.id;
+              save();
+              renderProjectsUI();
+              renderChart(); // чтобы перекрасить график под цвет проекта
+            };
 
-    // Подсветка активного проекта
-    if (p.id === state.activeProjectId) {
-      nameEl.style.fontWeight = '800';
-      row.style.outline = '1px solid rgba(124,92,255,.35)';
-      row.style.background = 'rgba(124,92,255,.08)';
-    }
+            // Подсветка активного проекта
+            if (p.id === state.activeProjectId) {
+              nameEl.style.fontWeight = '800';
+              row.style.outline = '1px solid rgba(124,92,255,.35)';
+              row.style.background = 'rgba(124,92,255,.08)';
+            }
 
-    const right = document.createElement('div');
-    right.className = 'row';
+            const right = document.createElement('div');
+            right.className = 'row';
 
-    // Изменение цвета проекта
-    const colorInput = document.createElement('input');
-    colorInput.type = 'color';
-    colorInput.value = p.color || '#7c5cff';
-    colorInput.style.width = '38px';
-    colorInput.style.height = '28px';
-    colorInput.style.border = 'none';
-    colorInput.style.background = 'transparent';
-    colorInput.title = 'Цвет проекта';
-    colorInput.oninput = () => {
-      p.color = colorInput.value;
-      dot.style.background = p.color;
-      if (p.id === state.activeProjectId && activeDot) {
-        activeDot.style.background = p.color;
-      }
-      save();
-      renderChart();
-      pushProjectToCloud({ id: p.id, name: p.name, color: p.color }).catch(() => {});
-    };
+            // Изменение цвета проекта
+            const colorInput = document.createElement('input');
+            colorInput.type = 'color';
+            colorInput.value = p.color || '#7c5cff';
+            colorInput.style.width = '38px';
+            colorInput.style.height = '28px';
+            colorInput.style.border = 'none';
+            colorInput.style.background = 'transparent';
+            colorInput.title = 'Цвет проекта';
+            colorInput.oninput = () => {
+              p.color = colorInput.value;
+              dot.style.background = p.color;
+              if (p.id === state.activeProjectId && activeDot) {
+                activeDot.style.background = p.color;
+              }
+              save();
+              renderChart();
+              pushProjectToCloud({
+                id: p.id,
+                name: p.name,
+                color: p.color,
+              }).catch(() => {});
+            };
 
-    // Удаление проекта
-    const delBtn = document.createElement('button');
-    delBtn.className = 'pill';
-    delBtn.textContent = 'Удалить';
-    delBtn.type = 'button';
-    delBtn.dataset.action = 'delete';
-    delBtn.dataset.id = p.id;
+            // Удаление проекта
+            const delBtn = document.createElement('button');
+            delBtn.className = 'pill';
+            delBtn.textContent = 'Удалить';
+            delBtn.type = 'button';
+            delBtn.dataset.action = 'delete';
+            delBtn.dataset.id = p.id;
 
-    right.append(colorInput, delBtn);
-    row.append(info, right);
-    projectList.appendChild(row);
-  });
-}
+            right.append(colorInput, delBtn);
+            row.append(info, right);
+            projectList.appendChild(row);
+          });
+        }
 
-          
         function render() {
           focusMins.value = state.settings.focus;
           shortMins.value = state.settings.short;
@@ -1545,41 +1728,43 @@
         }
 
         // ===== Events
-                  startBtn.onclick = () => (state.running ? pause() : start());
-                  skipBtn.onclick = () => {
-                    state._skipped = true;
-                    state.remaining = 0.01;
-                    save();
-                  };
-                  commitBtn.onclick = () => {
-            // засчитываем только в режиме фокуса
-            if (state.mode !== 'focus') {
-              showToast('Можно засчитать только в режиме «Фокус».');
-              return;
-            }
+        startBtn.onclick = () => (state.running ? pause() : start());
+        skipBtn.onclick = () => {
+          state._skipped = true;
+          state.remaining = 0.01;
+          save();
+        };
+        commitBtn.onclick = () => {
+          // засчитываем только в режиме фокуса
+          if (state.mode !== 'focus') {
+            showToast('Можно засчитать только в режиме «Фокус».');
+            return;
+          }
 
-            // считаем прошедшее время: из полного фокуса вычитаем остаток
-            const base = MODES.find(m => m.id === 'focus').secs;
-            const elapsedMin = Math.max(0, Math.round((base - state.remaining) / 60));
+          // считаем прошедшее время: из полного фокуса вычитаем остаток
+          const base = MODES.find((m) => m.id === 'focus').secs;
+          const elapsedMin = Math.max(
+            0,
+            Math.round((base - state.remaining) / 60)
+          );
 
-            if (elapsedMin <= 0) {
-              showToast('Пока нечего засчитывать.');
-              return;
-            }
+          if (elapsedMin <= 0) {
+            showToast('Пока нечего засчитывать.');
+            return;
+          }
 
-            addFocusMinutes(elapsedMin, state.activeProjectId);
-            showToast(`Засчитано: ${elapsedMin} мин`);
+          addFocusMinutes(elapsedMin, state.activeProjectId);
+          showToast(`Засчитано: ${elapsedMin} мин`);
 
-            // останавливаем таймер и оставляем режим как есть
-            state.running = false;
-            startBtn.textContent = 'Старт';
-            statusEl.textContent = 'Готов';
+          // останавливаем таймер и оставляем режим как есть
+          state.running = false;
+          startBtn.textContent = 'Старт';
+          statusEl.textContent = 'Готов';
 
-            save();
-            renderKPIs();
-            renderChart();
-          };
-
+          save();
+          renderKPIs();
+          renderChart();
+        };
 
         activeProjectSel.onchange = () => {
           state.activeProjectId = activeProjectSel.value;
@@ -2053,169 +2238,6 @@
             console.warn('Self-tests failed', err);
           }
         })();
-        // ===== Мини-виджет Pomodoro =====
-        const widget = document.getElementById('miniWidget');
-        const widgetTime = document.getElementById('widgetTime');
-        const widgetStatus = document.getElementById('widgetStatus');
-        const widgetToggle = document.getElementById('widgetToggle');
-
-        // ===== Document Picture-in-Picture =====
-        async function openPip() {
-          // Проверка поддержки
-          if (!('documentPictureInPicture' in window)) {
-            alert(
-              'Ваш браузер не поддерживает Document Picture-in-Picture. Попробуйте Chrome/Edge.'
-            );
-            return;
-          }
-
-          // Создаём PiP-окно
-          pipWindow = await documentPictureInPicture.requestWindow({
-            width: 220,
-            height: 140,
-          });
-
-          // Когда PiP закрывается — чистим ссылку
-          pipWindow.addEventListener('pagehide', () => {
-            pipWindow = null;
-          });
-
-          // Небольшой UI внутри PiP-окна
-          pipWindow.document.body.style.margin = '0';
-          pipWindow.document.body.style.fontFamily =
-            'system-ui, -apple-system, Segoe UI, Roboto, Arial';
-          pipWindow.document.body.style.background = '#121a33';
-          pipWindow.document.body.style.color = '#e2e8f0';
-
-          pipWindow.document.body.innerHTML = `
-          <div id="pipRoot" style="padding:12px; width:100%; height:100%; box-sizing:border-box;">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-              <strong id="pipStatus" style="font-size:14px;">Фокус</strong>
-              <div>
-                <button id="pipFocus" title="Фокус">🎯</button>
-                <button id="pipShort" title="Перерыв">☕</button>
-                <button id="pipLong"  title="Длинный">🕒</button>
-              </div>
-            </div>
-            <div id="pipTime" style="font-size:28px; font-weight:800; text-align:center;">25:00</div>
-            <div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">
-              <button id="pipToggle" style="padding:6px 10px; border-radius:8px; border:none; cursor:pointer;">▶️</button>
-            </div>
-          </div>
-        `;
-
-          // Стили для кнопок
-          Array.from(pipWindow.document.querySelectorAll('button')).forEach(
-            (b) => {
-              b.style.background = '#0f1630';
-              b.style.color = '#dbe3f0';
-              b.style.border = '1px solid rgba(255,255,255,0.12)';
-              b.style.borderRadius = '8px';
-              b.style.cursor = 'pointer';
-              b.onmouseenter = () => (b.style.background = '#192447');
-              b.onmouseleave = () => (b.style.background = '#0f1630');
-            }
-          );
-
-          // Команды из PiP — в основной канал
-          pipWindow.document.getElementById('pipToggle').onclick = () => {
-            bc.postMessage({ type: 'cmd', action: 'toggle' });
-          };
-          pipWindow.document.getElementById('pipFocus').onclick = () => {
-            bc.postMessage({ type: 'cmd', action: 'switch', mode: 'focus' });
-          };
-          pipWindow.document.getElementById('pipShort').onclick = () => {
-            bc.postMessage({ type: 'cmd', action: 'switch', mode: 'short' });
-          };
-          pipWindow.document.getElementById('pipLong').onclick = () => {
-            bc.postMessage({ type: 'cmd', action: 'switch', mode: 'long' });
-          };
-
-          // Обновление данных в PiP
-          function renderPip(payload) {
-            if (!pipWindow) return;
-            const t = pipWindow.document.getElementById('pipTime');
-            const s = pipWindow.document.getElementById('pipStatus');
-            const toggle = pipWindow.document.getElementById('pipToggle');
-            if (!t || !s || !toggle) return;
-
-            const secs = Math.ceil(payload.remaining ?? 0);
-            const mm = String(Math.floor(secs / 60)).padStart(2, '0');
-            const ss = String(secs % 60).padStart(2, '0');
-            t.textContent = `${mm}:${ss}`;
-            s.textContent =
-              payload.mode === 'focus'
-                ? 'Фокус'
-                : payload.mode === 'short'
-                ? 'Перерыв'
-                : 'Длинный';
-            toggle.textContent = payload.running ? '⏸️' : '▶️';
-          }
-
-          // Слушаем канал внутри PiP и отрисовываем
-          const pipChannel = new BroadcastChannel('pomodoro-sync');
-          pipChannel.onmessage = (ev) => {
-            const msg = ev.data || {};
-            if (msg.type === 'state') renderPip(msg.payload || {});
-          };
-
-          // Инициализируем стартовым состоянием
-          renderPip({
-            remaining: state.remaining,
-            mode: state.mode,
-            running: state.running,
-          });
-        }
-
-        // Кнопка "📌" в основном виджете
-        document
-          .getElementById('widgetPin')
-          ?.addEventListener('click', openPip);
-
-        function updateWidget() {
-          if (!widget) return;
-          const s = Math.ceil(state.remaining);
-          const min = String(Math.floor(s / 60)).padStart(2, '0');
-          const sec = String(s % 60).padStart(2, '0');
-          widgetTime.textContent = `${min}:${sec}`;
-          widgetStatus.textContent =
-            state.mode === 'focus'
-              ? 'Фокус'
-              : state.mode === 'short'
-              ? 'Перерыв'
-              : 'Длинный';
-          widgetToggle.textContent = state.running ? '⏸️' : '▶️';
-        }
-
-        widgetToggle.onclick = () => {
-          state.running ? pause() : start();
-          updateWidget();
-        };
-
-        // возможность перетаскивать
-        (function enableDrag(el) {
-          let isDragging = false,
-            offsetX = 0,
-            offsetY = 0;
-          const header = document.getElementById('widgetHeader');
-          header.addEventListener('mousedown', (e) => {
-            isDragging = true;
-            offsetX = e.clientX - el.offsetLeft;
-            offsetY = e.clientY - el.offsetTop;
-            document.body.style.userSelect = 'none';
-          });
-          window.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            el.style.left = `${e.clientX - offsetX}px`;
-            el.style.top = `${e.clientY - offsetY}px`;
-            el.style.right = 'auto';
-            el.style.bottom = 'auto';
-          });
-          window.addEventListener('mouseup', () => {
-            isDragging = false;
-            document.body.style.userSelect = '';
-          });
-        })(widget);
 
         // ===== Init
         render();

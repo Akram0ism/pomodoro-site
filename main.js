@@ -36,8 +36,7 @@
   const SUPABASE_ANON_KEY =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpbGVqYmtzYnVleHJuY3Z0dW5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0NjMxNDcsImV4cCI6MjA3NzAzOTE0N30.sF9ffDQYpxXSqbqlCNkklSoC0ZTzqO3pskOZ9AyHKsY'; // <= замени
   const supa =
-    SUPABASE_URL.startsWith('https://') &&
-    !SUPABASE_ANON_KEY.includes('YOUR_')
+    SUPABASE_URL.startsWith('https://') && !SUPABASE_ANON_KEY.includes('YOUR_')
       ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
       : null;
   // ===== Восстановление сессии после магической ссылки =====
@@ -148,77 +147,91 @@
   const authLogoutBtn = document.getElementById('authLogoutBtn');
   const authMenuEmail = document.getElementById('authMenuEmail');
   const authPassInput = document.getElementById('authMenuPass');
-  const authSignupBtn  = document.getElementById('authSignupBtn');
-  const authGoogleBtn  = document.getElementById('authGoogleBtn');
+  const authSignupBtn = document.getElementById('authSignupBtn');
+  const authGoogleBtn = document.getElementById('authGoogleBtn');
 
   // вспом: редирект назад на ту же страницу
-const REDIRECT_TO = location.origin + location.pathname;
+  const REDIRECT_TO = location.origin + location.pathname;
 
-// Вход по email+пароль
-if (authLoginBtn) authLoginBtn.onclick = async () => {
-  if (!supa) return showToast('Supabase клиент не инициализирован');
-  const email = (authMenuEmail?.value || '').trim();
-  const password = (authPassInput?.value || '').trim();
-  if (!email || !password) { showToast('Введите e-mail и пароль'); return; }
+  // Вход по email+пароль
+  if (authLoginBtn)
+    authLoginBtn.onclick = async () => {
+      if (!supa) return showToast('Supabase клиент не инициализирован');
+      const email = (authMenuEmail?.value || '').trim();
+      const password = (authPassInput?.value || '').trim();
+      if (!email || !password) {
+        showToast('Введите e-mail и пароль');
+        return;
+      }
 
-  const { data, error } = await supa.auth.signInWithPassword({ email, password });
-  if (error) return showToast('Ошибка входа: ' + error.message);
+      const { data, error } = await supa.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) return showToast('Ошибка входа: ' + error.message);
 
-  showToast('Вы вошли');
-  authMenu?.classList.add('hidden');
-};
+      showToast('Вы вошли');
+      authMenu?.classList.add('hidden');
+    };
 
-// Регистрация (e-mail + пароль)
-if (authSignupBtn) authSignupBtn.onclick = async () => {
-  if (!supa) return showToast('Supabase клиент не инициализирован');
-  const email = (authMenuEmail?.value || '').trim();
-  const password = (authPassInput?.value || '').trim();
-  if (!email || !password) { showToast('Задайте e-mail и пароль'); return; }
-  if (password.length < 6) { showToast('Пароль >= 6 символов'); return; }
+  // Регистрация (e-mail + пароль)
+  if (authSignupBtn)
+    authSignupBtn.onclick = async () => {
+      if (!supa) return showToast('Supabase клиент не инициализирован');
+      const email = (authMenuEmail?.value || '').trim();
+      const password = (authPassInput?.value || '').trim();
+      if (!email || !password) {
+        showToast('Задайте e-mail и пароль');
+        return;
+      }
+      if (password.length < 6) {
+        showToast('Пароль >= 6 символов');
+        return;
+      }
 
-  const { data, error } = await supa.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: REDIRECT_TO,
-      // можно сохранить доп. поля профиля
-      data: { name: email.split('@')[0] }
-    },
-  });
-  if (error) return showToast('Ошибка регистрации: ' + error.message);
+      const { data, error } = await supa.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: REDIRECT_TO,
+          // можно сохранить доп. поля профиля
+          data: { name: email.split('@')[0] },
+        },
+      });
+      if (error) return showToast('Ошибка регистрации: ' + error.message);
 
-  if (data.user?.identities?.length === 0) {
-    // такой пользователь уже есть
-    showToast('Пользователь уже существует. Попробуй «Войти».');
-  } else {
-    showToast('Письмо для подтверждения отправлено на почту');
-  }
-};
+      if (data.user?.identities?.length === 0) {
+        // такой пользователь уже есть
+        showToast('Пользователь уже существует. Попробуй «Войти».');
+      } else {
+        showToast('Письмо для подтверждения отправлено на почту');
+      }
+    };
 
-// Вход через Google (OAuth)
-if (authGoogleBtn) authGoogleBtn.onclick = async () => {
-  if (!supa) return showToast('Supabase клиент не инициализирован');
-  const { data, error } = await supa.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: REDIRECT_TO,
-      queryParams: {
-        // подсказка выбора аккаунта
-        prompt: 'select_account',
-      },
-    },
-  });
-  if (error) showToast('Ошибка Google OAuth: ' + error.message);
-};
+  // Вход через Google (OAuth)
+  if (authGoogleBtn)
+    authGoogleBtn.onclick = async () => {
+      if (!supa) return showToast('Supabase клиент не инициализирован');
+      const { data, error } = await supa.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: REDIRECT_TO,
+          queryParams: {
+            // подсказка выбора аккаунта
+            prompt: 'select_account',
+          },
+        },
+      });
+      if (error) showToast('Ошибка Google OAuth: ' + error.message);
+    };
 
-// Логаут
-if (authLogoutBtn) authLogoutBtn.onclick = async () => {
-  await supa.auth.signOut();
-  authMenu?.classList.add('hidden');
-  showToast('Вы вышли');
-};
-
-
+  // Логаут
+  if (authLogoutBtn)
+    authLogoutBtn.onclick = async () => {
+      await supa.auth.signOut();
+      authMenu?.classList.add('hidden');
+      showToast('Вы вышли');
+    };
 
   authIcon.textContent = '👤'; // default
 
@@ -226,15 +239,15 @@ if (authLogoutBtn) authLogoutBtn.onclick = async () => {
     authMenu.classList.toggle('hidden');
   };
 
-// Enter в поле пароля = нажать "Войти"
-authPassInput?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') authLoginBtn?.click();
-});
+  // Enter в поле пароля = нажать "Войти"
+  authPassInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') authLoginBtn?.click();
+  });
 
-// Показ/скрытие меню (если ещё не сделал вариант с бекдропом)
-authIcon.onclick = () => {
-  authMenu?.classList.toggle('hidden');
-};
+  // Показ/скрытие меню (если ещё не сделал вариант с бекдропом)
+  authIcon.onclick = () => {
+    authMenu?.classList.toggle('hidden');
+  };
 
   // запуск по Enter
   authMenuEmail?.addEventListener('keydown', (e) => {
@@ -248,8 +261,9 @@ authIcon.onclick = () => {
 
   // Обновление UI при изменении статуса
   function updateAuthUI(user) {
-    if (!authIcon || !authEmailDisplay || !authLoginBtn || !authLogoutBtn) return;
-  
+    if (!authIcon || !authEmailDisplay || !authLoginBtn || !authLogoutBtn)
+      return;
+
     if (user) {
       authIcon.textContent = '✅';
       authEmailDisplay.textContent = user.email;
@@ -336,8 +350,7 @@ authIcon.onclick = () => {
         project: {},
       };
     if (!state.stats.history) state.stats.history = {};
-    if (state.settings.soundVolume == null)
-      state.settings.soundVolume = 0.8;
+    if (state.settings.soundVolume == null) state.settings.soundVolume = 0.8;
     if (!state.stats.todayByHour)
       state.stats.todayByHour = Array.from({ length: 24 }, () => 0);
     if (
@@ -347,8 +360,7 @@ authIcon.onclick = () => {
     ) {
       state.projects = [{ id: 'default', name: 'Общее' }];
     }
-    if (!state.activeProjectId)
-      state.activeProjectId = state.projects[0].id;
+    if (!state.activeProjectId) state.activeProjectId = state.projects[0].id;
     if (!state.stats.project) state.stats.project = {};
     state.projects.forEach((p) => {
       if (!p.color) p.color = '#7c5cff'; // выдаём базовый цвет, если нет
@@ -500,7 +512,7 @@ authIcon.onclick = () => {
     statusEl.textContent = 'Идёт…';
     save();
     broadcastState();
-  
+
     try {
       if (!pipWindow && 'documentPictureInPicture' in window) {
         pipWindow = await openPip();
@@ -515,19 +527,24 @@ authIcon.onclick = () => {
   // ===== Document Picture-in-Picture =====
   async function openPip() {
     if (!('documentPictureInPicture' in window)) return null;
-  
+
     // просим окно
-    const win = await documentPictureInPicture.requestWindow({ width: 220, height: 140 });
+    const win = await documentPictureInPicture.requestWindow({
+      width: 220,
+      height: 140,
+    });
     pipWindow = win; // запоминаем глобально
-  
-    win.addEventListener('pagehide', () => { pipWindow = null; });
-  
+
+    win.addEventListener('pagehide', () => {
+      pipWindow = null;
+    });
+
     const doc = win.document;
     doc.body.style.margin = '0';
     doc.body.style.fontFamily = 'system-ui,-apple-system,Segoe UI,Roboto,Arial';
     doc.body.style.background = '#121a33';
     doc.body.style.color = '#e2e8f0';
-  
+
     doc.body.innerHTML = `
       <div id="pipRoot" style="padding:12px;width:100%;height:100%;box-sizing:border-box;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -544,9 +561,9 @@ authIcon.onclick = () => {
         </div>
       </div>
     `;
-  
+
     // стили для всех кнопок (если есть)
-    Array.from(doc.querySelectorAll('button')).forEach(b => {
+    Array.from(doc.querySelectorAll('button')).forEach((b) => {
       b.style.background = '#0f1630';
       b.style.color = '#dbe3f0';
       b.style.border = '1px solid rgba(255,255,255,.12)';
@@ -555,40 +572,59 @@ authIcon.onclick = () => {
       b.onmouseenter = () => (b.style.background = '#192447');
       b.onmouseleave = () => (b.style.background = '#0f1630');
     });
-  
-    const byId = id => doc.getElementById(id);
-  
+
+    const byId = (id) => doc.getElementById(id);
+
     const btnToggle = byId('pipToggle');
-    if (btnToggle) btnToggle.onclick = () => bc.postMessage({ type: 'cmd', action: 'toggle' });
-  
+    if (btnToggle)
+      btnToggle.onclick = () =>
+        bc.postMessage({ type: 'cmd', action: 'toggle' });
+
     const btnFocus = byId('pipFocus');
-    if (btnFocus) btnFocus.onclick = () => bc.postMessage({ type: 'cmd', action: 'switch', mode: 'focus' });
-  
+    if (btnFocus)
+      btnFocus.onclick = () =>
+        bc.postMessage({ type: 'cmd', action: 'switch', mode: 'focus' });
+
     const btnShort = byId('pipShort');
-    if (btnShort) btnShort.onclick = () => bc.postMessage({ type: 'cmd', action: 'switch', mode: 'short' });
-  
+    if (btnShort)
+      btnShort.onclick = () =>
+        bc.postMessage({ type: 'cmd', action: 'switch', mode: 'short' });
+
     const btnLong = byId('pipLong');
-    if (btnLong) btnLong.onclick = () => bc.postMessage({ type: 'cmd', action: 'switch', mode: 'long' });
-  
+    if (btnLong)
+      btnLong.onclick = () =>
+        bc.postMessage({ type: 'cmd', action: 'switch', mode: 'long' });
+
     function renderPip(payload) {
       if (!pipWindow) return;
-      const t = byId('pipTime'), s = byId('pipStatus'), toggle = byId('pipToggle');
+      const t = byId('pipTime'),
+        s = byId('pipStatus'),
+        toggle = byId('pipToggle');
       if (!t || !s || !toggle) return;
       const secs = Math.ceil(payload.remaining ?? 0);
       const mm = String(Math.floor(secs / 60)).padStart(2, '0');
       const ss = String(secs % 60).padStart(2, '0');
       t.textContent = `${mm}:${ss}`;
-      s.textContent = payload.mode === 'focus' ? 'Фокус' : payload.mode === 'short' ? 'Перерыв' : 'Длинный';
+      s.textContent =
+        payload.mode === 'focus'
+          ? 'Фокус'
+          : payload.mode === 'short'
+          ? 'Перерыв'
+          : 'Длинный';
       toggle.textContent = payload.running ? '⏸️' : '▶️';
     }
-  
+
     const pipChannel = new BroadcastChannel('pomodoro-sync');
-    pipChannel.onmessage = ev => {
+    pipChannel.onmessage = (ev) => {
       const msg = ev.data || {};
       if (msg.type === 'state') renderPip(msg.payload || {});
     };
-  
-    renderPip({ remaining: state.remaining, mode: state.mode, running: state.running });
+
+    renderPip({
+      remaining: state.remaining,
+      mode: state.mode,
+      running: state.running,
+    });
     return win;
   }
   function onTimerEnd() {
@@ -606,8 +642,7 @@ authIcon.onclick = () => {
         const d = nowISO();
         state.stats.history[d] = (state.stats.history[d] || 0) + addMin;
         const h = new Date().getHours();
-        state.stats.todayByHour[h] =
-          (state.stats.todayByHour[h] || 0) + addMin;
+        state.stats.todayByHour[h] = (state.stats.todayByHour[h] || 0) + addMin;
         const pid = state.activeProjectId;
         const ps =
           state.stats.project[pid] ||
@@ -658,18 +693,18 @@ authIcon.onclick = () => {
   }
 
   // ===== Overlay (плавающий мини-виджет) =====
-let overlayEl = null;
+  let overlayEl = null;
 
-function ensureOverlay() {
-  if (overlayEl) return;
-  overlayEl = document.createElement('div');
-  overlayEl.style.cssText = `
+  function ensureOverlay() {
+    if (overlayEl) return;
+    overlayEl = document.createElement('div');
+    overlayEl.style.cssText = `
     position:fixed; right:16px; bottom:16px; z-index:9999;
     background:#121a33; color:#e2e8f0; border:1px solid rgba(255,255,255,.12);
     border-radius:12px; padding:10px 12px; width:180px; box-shadow:0 10px 30px rgba(0,0,0,.35);
     font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
   `;
-  overlayEl.innerHTML = `
+    overlayEl.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
       <strong id="ovStatus" style="font-size:13px">Фокус</strong>
       <button id="ovClose" title="Закрыть"
@@ -683,48 +718,71 @@ function ensureOverlay() {
       <button id="ovLong"   title="Длинный" style="background:#0f1630;border:1px solid rgba(255,255,255,.12);color:#dbe3f0;border-radius:8px;cursor:pointer;padding:6px 10px;">🕒</button>
     </div>
   `;
-  document.body.appendChild(overlayEl);
+    document.body.appendChild(overlayEl);
 
-  const q = (sel) => overlayEl.querySelector(sel);
-  q('#ovClose')?.addEventListener('click', () => { overlayEl.remove(); overlayEl = null; });
-  q('#ovToggle')?.addEventListener('click', () => { state.running ? pause() : start(); updateOverlay(); });
-  q('#ovFocus') ?.addEventListener('click', () => { switchMode('focus', true); updateOverlay(); });
-  q('#ovShort') ?.addEventListener('click', () => { switchMode('short',  true); updateOverlay(); });
-  q('#ovLong')  ?.addEventListener('click', () => { switchMode('long',   true); updateOverlay(); });
+    const q = (sel) => overlayEl.querySelector(sel);
+    q('#ovClose')?.addEventListener('click', () => {
+      overlayEl.remove();
+      overlayEl = null;
+    });
+    q('#ovToggle')?.addEventListener('click', () => {
+      state.running ? pause() : start();
+      updateOverlay();
+    });
+    q('#ovFocus')?.addEventListener('click', () => {
+      switchMode('focus', true);
+      updateOverlay();
+    });
+    q('#ovShort')?.addEventListener('click', () => {
+      switchMode('short', true);
+      updateOverlay();
+    });
+    q('#ovLong')?.addEventListener('click', () => {
+      switchMode('long', true);
+      updateOverlay();
+    });
 
-  updateOverlay();
-}
-
-function updateOverlay() {
-  if (!overlayEl) return;
-  const timeNode = overlayEl.querySelector('#ovTime');
-  const statusNode = overlayEl.querySelector('#ovStatus');
-  const toggleNode = overlayEl.querySelector('#ovToggle');
-  if (!timeNode || !statusNode || !toggleNode) return;
-
-  const secs = Math.ceil(state.remaining);
-  const mm = String(Math.floor(secs / 60)).padStart(2, '0');
-  const ss = String(secs % 60).padStart(2, '0');
-  timeNode.textContent = `${mm}:${ss}`;
-  statusNode.textContent = state.mode === 'focus' ? 'Фокус' : state.mode === 'short' ? 'Перерыв' : 'Длинный';
-  toggleNode.textContent = state.running ? '⏸️' : '▶️';
-}
-
-// ===== Pause (остановка таймера + закрытие PiP) =====
-function pause() {
-  state.running = false;
-  if (typeof startBtn !== 'undefined' && startBtn) startBtn.textContent = 'Старт';
-  if (typeof statusEl !== 'undefined' && statusEl) statusEl.textContent = 'Пауза';
-  save();
-  broadcastState();
-
-  // Закрываем PiP если он был
-  if (pipWindow) {
-    try { pipWindow.close?.(); } catch {}
-    pipWindow = null;
+    updateOverlay();
   }
-}
 
+  function updateOverlay() {
+    if (!overlayEl) return;
+    const timeNode = overlayEl.querySelector('#ovTime');
+    const statusNode = overlayEl.querySelector('#ovStatus');
+    const toggleNode = overlayEl.querySelector('#ovToggle');
+    if (!timeNode || !statusNode || !toggleNode) return;
+
+    const secs = Math.ceil(state.remaining);
+    const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+    const ss = String(secs % 60).padStart(2, '0');
+    timeNode.textContent = `${mm}:${ss}`;
+    statusNode.textContent =
+      state.mode === 'focus'
+        ? 'Фокус'
+        : state.mode === 'short'
+        ? 'Перерыв'
+        : 'Длинный';
+    toggleNode.textContent = state.running ? '⏸️' : '▶️';
+  }
+
+  // ===== Pause (остановка таймера + закрытие PiP) =====
+  function pause() {
+    state.running = false;
+    if (typeof startBtn !== 'undefined' && startBtn)
+      startBtn.textContent = 'Старт';
+    if (typeof statusEl !== 'undefined' && statusEl)
+      statusEl.textContent = 'Пауза';
+    save();
+    broadcastState();
+
+    // Закрываем PiP если он был
+    if (pipWindow) {
+      try {
+        pipWindow.close?.();
+      } catch {}
+      pipWindow = null;
+    }
+  }
 
   // ===== Audio unlock & shared context
   let __ac; // shared AudioContext
@@ -763,10 +821,7 @@ function pause() {
       const ac = getAC();
 
       const master = ac.createGain();
-      const vol = Math.min(
-        1,
-        Math.max(0, state.settings.soundVolume ?? 0.8)
-      );
+      const vol = Math.min(1, Math.max(0, state.settings.soundVolume ?? 0.8));
       master.gain.setValueAtTime(0.0001, ac.currentTime);
       master.connect(ac.destination);
 
@@ -794,10 +849,7 @@ function pause() {
         o.frequency.setValueAtTime(freq, t0);
         if (detune) o.detune.setValueAtTime(detune, t0);
         g.gain.setValueAtTime(0.0001, t0);
-        g.gain.exponentialRampToValueAtTime(
-          Math.max(0.05, peak),
-          t0 + 0.03
-        );
+        g.gain.exponentialRampToValueAtTime(Math.max(0.05, peak), t0 + 0.03);
         g.gain.exponentialRampToValueAtTime(0.0008, end);
         o.connect(g).connect(out);
         o.start(t0);
@@ -1019,12 +1071,10 @@ function pause() {
     }
     if (soundVolume) {
       soundVolume.addEventListener('input', () => {
-        if (soundVolumeVal)
-          soundVolumeVal.textContent = soundVolume.value;
+        if (soundVolumeVal) soundVolumeVal.textContent = soundVolume.value;
       });
       soundVolume.addEventListener('input', () => {
-        if (soundVolumeVal)
-          soundVolumeVal.textContent = soundVolume.value;
+        if (soundVolumeVal) soundVolumeVal.textContent = soundVolume.value;
         const percent = soundVolume.value + '%';
         soundVolume.style.setProperty('--pos', percent);
       });
@@ -1054,10 +1104,7 @@ function pause() {
 
     // считаем прошедшее время: из полного фокуса вычитаем остаток
     const base = MODES.find((m) => m.id === 'focus').secs;
-    const elapsedMin = Math.max(
-      0,
-      Math.round((base - state.remaining) / 60)
-    );
+    const elapsedMin = Math.max(0, Math.round((base - state.remaining) / 60));
 
     if (elapsedMin <= 0) {
       showToast('Пока нечего засчитывать.');
@@ -1088,9 +1135,7 @@ function pause() {
   quickAddProject.onclick = () => {
     const name = prompt('Название проекта:')?.trim();
     if (!name) return;
-    const color = prompt(
-      'Цвет (#rrggbb), оставь пустым — случайный:'
-    )?.trim();
+    const color = prompt('Цвет (#rrggbb), оставь пустым — случайный:')?.trim();
     addProject(name, /^#([0-9a-f]{6})$/i.test(color) ? color : undefined);
   };
 
@@ -1118,17 +1163,14 @@ function pause() {
   }
 
   function deleteProject(id) {
-    const row = document
-      .querySelector(`[data-id="${id}"]`)
-      ?.closest('.row');
+    const row = document.querySelector(`[data-id="${id}"]`)?.closest('.row');
     if (row) {
       row.style.transition = 'opacity .3s';
       row.style.opacity = 0;
       setTimeout(() => {
         state.projects = state.projects.filter((p) => p.id !== id);
         delete state.stats.project[id];
-        if (state.activeProjectId === id)
-          state.activeProjectId = 'default';
+        if (state.activeProjectId === id) state.activeProjectId = 'default';
         if (chartProjectSel && chartProjectSel.value === id)
           chartProjectSel.value = '__all__';
         save();
@@ -1156,10 +1198,7 @@ function pause() {
       s = Math.max(1, +shortMins.value | 0),
       l = Math.max(1, +longMins.value | 0),
       r = Math.max(2, +roundsToLong.value | 0);
-    const vol = Math.max(
-      0,
-      Math.min(1, +(soundVolume?.value || 80) / 100)
-    );
+    const vol = Math.max(0, Math.min(1, +(soundVolume?.value || 80) / 100));
 
     state.settings = {
       focus: f,
@@ -1222,9 +1261,7 @@ function pause() {
 
   window.addEventListener('keydown', (e) => {
     if (
-      ['INPUT', 'TEXTAREA', 'SELECT'].includes(
-        document.activeElement.tagName
-      )
+      ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)
     )
       return;
     if (e.code === 'Space') {
@@ -1294,10 +1331,7 @@ function pause() {
                 todayByHour: Array.from({ length: 24 }, () => 0),
               });
             ps.history[day] = Math.max(ps.history[day] || 0, minutes);
-            ps.total = Object.values(ps.history).reduce(
-              (a, b) => a + b,
-              0
-            );
+            ps.total = Object.values(ps.history).reduce((a, b) => a + b, 0);
           } else {
             state.stats.history[day] = Math.max(
               state.stats.history[day] || 0,
@@ -1341,9 +1375,7 @@ function pause() {
     if (!supa) return;
     const u = (await supa.auth.getUser()).data.user;
     if (!u) return;
-    await supa
-      .from('projects')
-      .upsert({ id, user_id: u.id, name, color });
+    await supa.from('projects').upsert({ id, user_id: u.id, name, color });
   }
 
   async function deleteProjectFromCloud(id) {
@@ -1447,9 +1479,7 @@ function pause() {
 
     const ds = {
       label:
-        pid === '__all__'
-          ? 'Минуты фокуса (все проекты)'
-          : 'Минуты фокуса',
+        pid === '__all__' ? 'Минуты фокуса (все проекты)' : 'Минуты фокуса',
       data,
       borderWidth: 1,
       backgroundColor: color + (color.length === 7 ? '99' : ''), // полупрозрачный
@@ -1526,8 +1556,7 @@ function pause() {
     try {
       console.group('%cPomodoro self-tests', 'color:#7c5cff');
       console.assert(
-        typeof state.settings.focus === 'number' &&
-          state.settings.focus > 0,
+        typeof state.settings.focus === 'number' && state.settings.focus > 0,
         'focus setting'
       );
       console.assert(
@@ -1554,4 +1583,169 @@ function pause() {
   render();
   renderChart('week');
   requestAnimationFrame(tick);
+})();
+
+// ===== Mini Tour (подсказка навигации) =====
+(function setupMiniTour() {
+  const helpBtn = document.getElementById('helpBtn');
+  if (!helpBtn) return;
+
+  const steps = [
+    {
+      sel: '#modeTabs',
+      title: 'Режимы',
+      text: 'Переключайся между «Фокус», «Перерыв» и «Длинный».',
+      place: 'bottom',
+    },
+    {
+      sel: '#time',
+      title: 'Таймер',
+      text: 'Здесь идёт обратный отсчёт. Space — старт/пауза.',
+      place: 'right',
+    },
+    {
+      sel: '#startPause',
+      title: 'Старт/Пауза',
+      text: 'Запускай сессию, останавливай, или засчитывай минутки кнопкой «Зачесть».',
+      place: 'top',
+    },
+    {
+      sel: '#projectList',
+      title: 'Проекты',
+      text: 'Веди учёт фокус-минут по проектам и меняй цвета.',
+      place: 'left',
+    },
+    {
+      sel: '#focusChart',
+      title: 'Статистика',
+      text: 'Смотри прогресс по дням/неделям, фильтруй по проектам.',
+      place: 'top',
+    },
+  ];
+
+  helpBtn.addEventListener('click', () => startTour(steps));
+
+  function startTour(steps) {
+    let i = 0;
+    const overlay = document.createElement('div');
+    overlay.className = 'tour-overlay';
+    overlay.addEventListener('click', () => end(true));
+    document.body.appendChild(overlay);
+
+    const ring = document.createElement('div');
+    ring.className = 'tour-focus-ring';
+    document.body.appendChild(ring);
+
+    const tip = document.createElement('div');
+    tip.className = 'tour-tip';
+    document.body.appendChild(tip);
+
+    let autoTimer = null;
+
+    function go(n) {
+      clearTimeout(autoTimer);
+      i = n;
+      if (i < 0 || i >= steps.length) {
+        end();
+        return;
+      }
+
+      const step = steps[i];
+      const el = document.querySelector(step.sel);
+      if (!el) {
+        next();
+        return;
+      }
+
+      // позиция и размеры цели
+      const r = el.getBoundingClientRect();
+      const pad = 6;
+      ring.style.left = r.left - pad + 'px';
+      ring.style.top = r.top - pad + 'px';
+      ring.style.width = r.width + pad * 2 + 'px';
+      ring.style.height = r.height + pad * 2 + 'px';
+
+      // контент подсказки
+      // контент подсказки без кнопки "Пропустить"
+      tip.innerHTML = `
+<h4>${step.title}</h4>
+<div>${step.text}</div>
+<div class="tour-controls">
+  <button class="pill" id="tourPrev" ${i === 0 ? 'disabled' : ''}>Назад</button>
+  <button class="pill primary" id="tourNext">${
+    i === steps.length - 1 ? 'Готово' : 'Далее'
+  }</button>
+</div>
+`;
+
+      // позиционирование подсказки
+      const tw = Math.min(320, Math.max(220, r.width));
+      tip.style.width = tw + 'px';
+      const gap = 10;
+      let x = r.left,
+        y = r.top;
+
+      switch (step.place) {
+        case 'bottom':
+          x = r.left;
+          y = r.bottom + gap;
+          break;
+        case 'top':
+          x = r.left;
+          y = r.top - tip.offsetHeight - gap;
+          break;
+        case 'left':
+          x = r.left - tw - gap;
+          y = r.top;
+          break;
+        default:
+          x = r.right + gap;
+          y = r.top;
+          break; // right
+      }
+      // не вылезаем за экран
+      x = Math.max(12, Math.min(x, window.innerWidth - tw - 12));
+      y = Math.max(12, Math.min(y, window.innerHeight - tip.offsetHeight - 12));
+      tip.style.left = x + 'px';
+      tip.style.top = y + 'px';
+
+      // кнопки
+      tip.querySelector('#tourPrev')?.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        go(i - 1);
+      });
+      tip.querySelector('#tourNext')?.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        go(i + 1);
+      });
+
+      // авто-переход через 3.5 сек, если юзер не кликает
+      autoTimer = setTimeout(() => go(i + 1), 3500);
+    }
+
+    function next() {
+      go(i + 1);
+    }
+    function end(skipped) {
+      clearTimeout(autoTimer);
+      overlay.remove();
+      ring.remove();
+      tip.remove();
+      if (!skipped) showToast('Подсказка завершена');
+    }
+
+    // перестановка при ресайзе/прокрутке
+    const onRelayout = () => go(i);
+    window.addEventListener('resize', onRelayout);
+    window.addEventListener('scroll', onRelayout, true);
+    const origEnd = end;
+    end = function (skipped) {
+      // обёртка, чтобы снять слушатели
+      window.removeEventListener('resize', onRelayout);
+      window.removeEventListener('scroll', onRelayout, true);
+      origEnd(skipped);
+    };
+
+    go(0);
+  }
 })();

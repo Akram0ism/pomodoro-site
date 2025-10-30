@@ -8,6 +8,101 @@
   margin-bottom: 18px;
   border: 1px solid rgba(255, 255, 255, 0.07);
 }
+topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.help-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0f1630;
+  color: #dbe3f0;
+  font-weight: 800;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.2s, transform 0.1s;
+}
+.help-btn:hover {
+  background: rgba(124, 92, 255, 0.3);
+}
+.help-btn:active {
+  transform: scale(0.96);
+}
+
+/* затемняющий слой тура */
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(1px);
+  z-index: 9998;
+}
+
+/* подсказка */
+.tour-tip {
+  position: fixed;
+  max-width: 320px;
+  background: #121a33;
+  color: #e7ecf3;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  z-index: 9999;
+  pointer-events: auto;
+}
+.tour-tip h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: #b7c5ff;
+}
+.tour-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+.tour-controls .pill {
+  background: #0f1630;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #dbe3f0;
+}
+.tour-controls .pill.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* пульсирующее кольцо вокруг цели */
+.tour-focus-ring {
+  position: fixed;
+  border-radius: 12px;
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.9),
+    0 0 40px rgba(124, 92, 255, 0.6);
+  animation: tourPulse 1.2s ease-in-out infinite;
+  z-index: 9999;
+  pointer-events: none;
+}
+@keyframes tourPulse {
+  0% {
+    box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.9),
+      0 0 10px rgba(124, 92, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.9),
+      0 0 28px rgba(124, 92, 255, 0.8);
+  }
+  100% {
+    box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.9),
+      0 0 10px rgba(124, 92, 255, 0.4);
+  }
+}
 .logo {
   font-weight: 900;
   font-size: 20px;
@@ -31,23 +126,27 @@
 }
 .auth-menu {
   position: fixed;
-  right: 24px;             /* всегда прижато к правому краю */
-  top: 72px;               /* под топбаром, можешь подстроить */
-  background: #0f1630;     /* непрозрачный фон */
-  border: 1px solid rgba(255,255,255,0.12);
+  right: 24px; /* всегда прижато к правому краю */
+  top: 72px; /* под топбаром, можешь подстроить */
+  background: #0f1630; /* непрозрачный фон */
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  box-shadow: 0 16px 40px rgba(0,0,0,0.5);
-  z-index: 4002;           /* выше всего остального */
-  min-width: 300px;        /* чтобы не «ломалось» */
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  z-index: 4002; /* выше всего остального */
+  min-width: 300px; /* чтобы не «ломалось» */
 }
 
-.auth-menu.hidden { display: none; }
+.auth-menu.hidden {
+  display: none;
+}
 
-.auth-menu .muted { color: var(--muted); }
+.auth-menu .muted {
+  color: var(--muted);
+}
 
 .auth-menu .auth-row {
   display: grid;
@@ -55,21 +154,21 @@
   gap: 8px;
 }
 
-.auth-menu input[type="email"] {
+.auth-menu input[type='email'] {
   width: 100%;
   padding: 10px 12px;
   border-radius: 10px;
   background: #111a33;
   color: #e2e8f0;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
-.auth-menu input[type="password"] {
+.auth-menu input[type='password'] {
   width: 100%;
   padding: 10px 12px;
   border-radius: 10px;
   background: #111a33;
   color: #e2e8f0;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .auth-menu button {
@@ -81,14 +180,18 @@
   cursor: pointer;
   font-weight: 700;
 }
-.auth-menu button.full { width: 100%; }
+.auth-menu button.full {
+  width: 100%;
+}
 .auth-backdrop {
   position: fixed;
   inset: 0;
   background: transparent; /* можно сделать rgba(0,0,0,.15) если хочешь затемнение */
   z-index: 4000;
 }
-.auth-backdrop.hidden { display: none; }
+.auth-backdrop.hidden {
+  display: none;
+}
 :root {
   --bg: #0b1020;
   --panel: #121a33;

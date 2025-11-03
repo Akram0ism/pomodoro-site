@@ -696,7 +696,7 @@ body::before {
 }
 
 .color-dot {
-  display: inline-block;
+  display: inline-block; 
   width: 14px;
   height: 14px;
   border-radius: 50%;

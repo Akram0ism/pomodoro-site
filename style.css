@@ -415,13 +415,8 @@ select {
   color: #e2e8f0;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
-.switch {
-  display: inline-grid;
-  grid-auto-flow: column;
-  gap: 8px;
-  align-items: center;
-}
-.switch input {
+/* Переключатель — только для чекбоксов */
+.switch input[type='checkbox'] {
   width: 42px;
   height: 24px;
   appearance: none;
@@ -432,11 +427,11 @@ select {
   outline: none;
   cursor: pointer;
 }
-.switch input:checked {
+.switch input[type='checkbox']:checked {
   background: rgba(124, 92, 255, 0.3);
   border-color: var(--accent);
 }
-.switch input::after {
+.switch input[type='checkbox']::after {
   content: '';
   position: absolute;
   top: 2px;
@@ -447,9 +442,15 @@ select {
   background: #fff;
   transition: all 0.2s ease;
 }
-.switch input:checked::after {
+.switch input[type='checkbox']:checked::after {
   left: 20px;
 }
+
+/* Внутри .switch слайдерам не рисуем точку */
+.switch input[type='range']::after {
+  content: none !important;
+}
+
 .tasks .row {
   justify-content: space-between;
 }

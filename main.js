@@ -2,20 +2,7 @@
   // ===== Cross-tab/state sync для PiP =====
   const bc = new BroadcastChannel('pomodoro-sync');
   let pipWindow = null;
-  bc.onmessage = (ev) => {
-    const msg = ev.data || {};
-    if (msg.type === 'cmd') {
-      if (msg.action === 'toggle') {
-        state.running ? pause() : start();
-      }
-      if (
-        msg.action === 'switch' &&
-        ['focus', 'short', 'long'].includes(msg.mode)
-      ) {
-        switchMode(msg.mode, true);
-      }
-    }
-  };
+
   // src/main.js
 
   // Отправка текущего состояния в канал
@@ -29,22 +16,6 @@
       },
     });
   }
-
-  // Обработка команд из PiP (toggle/start/pause/switch)
-  bc.onmessage = (ev) => {
-    const msg = ev.data || {};
-    if (msg.type === 'cmd') {
-      if (msg.action === 'toggle') {
-        state.running ? pause() : start();
-      }
-      if (
-        msg.action === 'switch' &&
-        ['focus', 'short', 'long'].includes(msg.mode)
-      ) {
-        switchMode(msg.mode, true);
-      }
-    }
-  };
 
   bc.onmessage = (ev) => {
     const msg = ev?.data;
@@ -130,29 +101,34 @@
   }
 
   // ===== Welcome banner (персональное приветствие)
-  const DEFAULT_INFO_HTML =
-    'Простая система для фокуса: 25/5, длинный перерыв каждые 4 сета. ' +
-    'Горячие клавиши: <b>Space</b> — старт/пауза, <b>R</b> — сброс, <b>1</b>/<b>2</b>/<b>3</b> — режимы.';
+
+  function escapeHtml(s = '') {
+    return String(s).replace(
+      /[&<>"']/g,
+      (m) =>
+        ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;',
+        }[m])
+    );
+  }
 
   function updateWelcome(user) {
     const el = document.getElementById('welcomeText');
     if (!el) return;
-    el.textContent = ''; // очистка
 
     if (user) {
-      const wrap = document.createElement('span');
-      const bold = document.createElement('b');
       const name =
         user.user_metadata?.name ||
         (user.email ? user.email.split('@')[0] : 'пользователь');
-      wrap.append('👋 Здравствуйте, ');
-      bold.textContent = name;
-      wrap.append(bold, '!');
-      el.append(wrap);
+      el.innerHTML = `👋 Здравствуйте, <b>${escapeHtml(name)}</b>!`;
     } else {
-      el.textContent =
+      el.innerHTML =
         'Простая система для фокуса: 25/5, длинный перерыв каждые 4 сета. ' +
-        'Горячие клавиши: Space — старт/пауза, R — сброс, 1/2/3 — режимы.';
+        'Горячие клавиши: <b>Space</b> — старт/пауза, <b>R</b> — сброс, <b>1</b>/<b>2</b>/<b>3</b> — режимы.';
     }
   }
 
@@ -295,10 +271,6 @@
 
   authIcon.textContent = '👤'; // default
 
-  authIcon.onclick = () => {
-    authMenu.classList.toggle('hidden');
-  };
-
   // Enter в поле пароля = нажать "Войти"
   authPassInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') authLoginBtn?.click();
@@ -313,11 +285,6 @@
   authMenuEmail?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') authLoginBtn.click();
   });
-
-  authLogoutBtn.onclick = async () => {
-    await supa.auth.signOut();
-    authMenu.classList.add('hidden');
-  };
 
   // Обновление UI при изменении статуса
   function updateAuthUI(user) {
@@ -864,64 +831,11 @@
   // ===== Notifications & Sound (simple beep)
   function beep() {
     try {
-      const ac = getAC();
-
-      const master = ac.createGain();
-      const vol = Math.min(1, Math.max(0, state.settings.soundVolume ?? 0.8));
-      master.gain.setValueAtTime(0.0001, ac.currentTime);
-      master.connect(ac.destination);
-
-      let comp;
-      if (ac.createDynamicsCompressor) {
-        comp = ac.createDynamicsCompressor();
-        comp.threshold.setValueAtTime(-24, ac.currentTime);
-        comp.knee.setValueAtTime(20, ac.currentTime);
-        comp.ratio.setValueAtTime(6, ac.currentTime);
-        comp.attack.setValueAtTime(0.003, ac.currentTime);
-        comp.release.setValueAtTime(0.25, ac.currentTime);
-        comp.connect(master);
-      }
-
-      const out = comp || master;
-      const dur = 1.2; // сек
-      const t0 = ac.currentTime + 0.01;
-      const peak = 0.7 * vol;
-      const end = t0 + dur;
-
-      function mkOsc(freq, type = 'triangle', detune = 0) {
-        const o = ac.createOscillator();
-        const g = ac.createGain();
-        o.type = type;
-        o.frequency.setValueAtTime(freq, t0);
-        if (detune) o.detune.setValueAtTime(detune, t0);
-        g.gain.setValueAtTime(0.0001, t0);
-        g.gain.exponentialRampToValueAtTime(Math.max(0.05, peak), t0 + 0.03);
-        g.gain.exponentialRampToValueAtTime(0.0008, end);
-        o.connect(g).connect(out);
-        o.start(t0);
-        o.stop(end);
-        return o;
-      }
-
-      const o1 = mkOsc(880, 'triangle', +8);
-      const o2 = mkOsc(660, 'triangle', -6);
-      o1.frequency.linearRampToValueAtTime(820, t0 + 0.25);
-
-      const bumpT = t0 + 0.35;
-      master.gain.cancelScheduledValues(t0);
-      master.gain.setValueAtTime(0.0001, t0);
-      master.gain.exponentialRampToValueAtTime(peak, t0 + 0.02);
-      master.gain.setTargetAtTime(peak * 0.6, t0 + 0.15, 0.15);
-      master.gain.setTargetAtTime(peak * 0.8, bumpT, 0.02);
-      master.gain.setTargetAtTime(0.001, end - 0.1, 0.08);
+      const audio = new Audio('bell.mp3'); // имя твоего файла
+      audio.volume = state?.settings?.soundVolume ?? 0.8; // громкость с ползунка
+      audio.play().catch((err) => console.warn('Ошибка воспроизведения:', err));
     } catch (e) {
-      try {
-        const a = new Audio(
-          'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAACABAAZGF0YQgAAAAAAP8A/wD/AAAA/wD/AP8AAAD/AAAA'
-        );
-        a.volume = Math.min(1, state?.settings?.soundVolume ?? 0.8);
-        a.play().catch(() => {});
-      } catch (_) {}
+      console.warn('Audio play failed:', e);
     }
   }
 
@@ -1184,7 +1098,7 @@
   };
 
   quickAddProject.onclick = () => {
-    const name = prompt('Название проекта:');
+    let name = prompt('Название проекта:');
     name = sanitizeText(name, 40);
     if (!name) return;
     const color = prompt('Цвет (#rrggbb), оставь пустым — случайный:')?.trim();
@@ -1368,10 +1282,10 @@
 
   async function onSignedIn(user) {
     updateAuthUI(user);
+    updateWelcome(user);
     const welcome = document.getElementById('welcomeText');
     if (welcome) {
       const name = user.user_metadata?.name || user.email.split('@')[0];
-      welcome.textContent = `👋 Здравствуйте, <b>${name}</b>!`;
     }
 
     try {
@@ -1430,10 +1344,9 @@
   }
   function onSignedOut() {
     updateAuthUI(null);
+    updateWelcome(null);
     const welcome = document.getElementById('welcomeText');
     if (welcome) {
-      welcome.textContent =
-        'Простая система для фокуса: 25/5, длинный перерыв каждые 4 сета. Горячие клавиши: <b>Space</b> — старт/пауза, <b>R</b> — сброс, <b>1</b>/<b>2</b>/<b>3</b> — режимы.';
     }
   }
 
@@ -1876,7 +1789,7 @@ document.addEventListener('DOMContentLoaded', () => {
       right.innerHTML = `
         <ins class="adsbygoogle"
              style="display:block"
-             data-ad-client="${ca - pub - 4263398644681945}"
+             data-ad-client= "ca - pub - 4263398644681945"
              data-ad-slot="9510004602"
              data-ad-format="rectangle"
              data-full-width-responsive="true"></ins>`;

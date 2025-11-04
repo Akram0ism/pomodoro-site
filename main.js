@@ -442,6 +442,12 @@
 
   const activeProjectSel = $('#activeProject');
   const quickAddProject = $('#quickAddProject');
+  // прячем кнопку «+ Проект» под таймером и отключаем клики
+  if (quickAddProject) {
+    quickAddProject.style.display = 'none';
+    quickAddProject.style.pointerEvents = 'none';
+  }
+
   const newProjectName = $('#newProjectName');
   const addProjectBtn = $('#addProjectBtn');
   const projectList = $('#projectList');
@@ -1096,14 +1102,17 @@
     if (activeDot)
       activeDot.style.background = getProjectColor(state.activeProjectId);
   };
-
-  quickAddProject.onclick = () => {
-    let name = prompt('Название проекта:');
-    name = sanitizeText(name, 40);
-    if (!name) return;
-    const color = prompt('Цвет (#rrggbb), оставь пустым — случайный:')?.trim();
-    addProject(name, /^#([0-9a-f]{6})$/i.test(color) ? color : undefined);
-  };
+  if (quickAddProject) {
+    quickAddProject.onclick = () => {
+      let name = prompt('Название проекта:');
+      name = sanitizeText(name, 40);
+      if (!name) return;
+      const color = prompt(
+        'Цвет (#rrggbb), оставь пустым — случайный:'
+      )?.trim();
+      addProject(name, /^#([0-9a-f]{6})$/i.test(color) ? color : undefined);
+    };
+  }
 
   addProjectBtn.onclick = () => {
     const name = sanitizeText(newProjectName.value, 40);

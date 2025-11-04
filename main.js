@@ -261,26 +261,6 @@
       if (error) showToast('Ошибка Google OAuth: ' + error.message);
     };
 
-
-    // Google OAuth
-await supa.auth.signInWithOAuth({
-  provider: 'google',
-  options: {
-    redirectTo: REDIRECT_TO,
-    queryParams: { prompt: 'select_account' },
-  },
-});
-
-// Email + пароль (и magic-link-подтверждение)
-await supa.auth.signUp({
-  email, password,
-  options: {
-    emailRedirectTo: REDIRECT_TO,
-    data: { name: email.split('@')[0] },
-  },
-});
-
-
   // Логаут
   if (authLogoutBtn)
     authLogoutBtn.onclick = async () => {

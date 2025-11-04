@@ -187,7 +187,8 @@
   const authGoogleBtn = document.getElementById('authGoogleBtn');
 
   // вспом: редирект назад на ту же страницу
-  const REDIRECT_TO = location.origin;
+  const REDIRECT_TO = `${location.origin}${location.pathname}`;
+  /// const REDIRECT_TO = 'https://username.github.io/your-repo/index.html';
 
   // Вход по email+пароль
   if (authLoginBtn)

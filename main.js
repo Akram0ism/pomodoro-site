@@ -187,8 +187,7 @@
   const authGoogleBtn = document.getElementById('authGoogleBtn');
 
   // вспом: редирект назад на ту же страницу
-  const REDIRECT_TO = `${location.origin}${location.pathname}`;
-  /// const REDIRECT_TO = 'https://username.github.io/your-repo/index.html';
+  const REDIRECT_TO = `https://akram0ism.github.io/pomodoro-site/`;
 
   // Вход по email+пароль
   if (authLoginBtn)
@@ -261,6 +260,26 @@
       });
       if (error) showToast('Ошибка Google OAuth: ' + error.message);
     };
+
+
+    // Google OAuth
+await supa.auth.signInWithOAuth({
+  provider: 'google',
+  options: {
+    redirectTo: REDIRECT_TO,
+    queryParams: { prompt: 'select_account' },
+  },
+});
+
+// Email + пароль (и magic-link-подтверждение)
+await supa.auth.signUp({
+  email, password,
+  options: {
+    emailRedirectTo: REDIRECT_TO,
+    data: { name: email.split('@')[0] },
+  },
+});
+
 
   // Логаут
   if (authLogoutBtn)

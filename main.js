@@ -366,6 +366,7 @@
 
   function migrateState() {
     const d = nowISO();
+
     if (!state.stats)
       state.stats = {
         todayDate: d,
@@ -376,21 +377,26 @@
         todayByHour: Array.from({ length: 24 }, () => 0),
         project: {},
       };
+
     if (!state.stats.history) state.stats.history = {};
     if (state.settings.soundVolume == null) state.settings.soundVolume = 0.8;
     if (!state.stats.todayByHour)
       state.stats.todayByHour = Array.from({ length: 24 }, () => 0);
-    if (
-      !state.projects ||
-      !Array.isArray(state.projects) ||
-      state.projects.length === 0
-    ) {
-      state.projects = [{ id: 'default', name: 'Общее' }];
+
+    // ⬇️ ВАЖНО: не пересоздаём дефолт, если projects — пустой массив
+    if (!Array.isArray(state.projects)) {
+      state.projects = [{ id: 'default', name: 'Общее', color: '#7c5cff' }];
     }
-    if (!state.activeProjectId) state.activeProjectId = state.projects[0].id;
+
+    if (!state.activeProjectId) {
+      state.activeProjectId = state.projects[0]?.id || null;
+    }
+
     if (!state.stats.project) state.stats.project = {};
+
+    // гарантируем структуру для существующих проектов
     state.projects.forEach((p) => {
-      if (!p.color) p.color = '#7c5cff'; // выдаём базовый цвет, если нет
+      if (!p.color) p.color = '#7c5cff';
       if (!state.stats.project[p.id]) {
         state.stats.project[p.id] = {
           total: 0,
@@ -399,6 +405,11 @@
         };
       }
     });
+
+    // если вообще нет проектов — оставляем пусто, НИЧЕГО не создаём
+    if (state.projects.length === 0) {
+      state.activeProjectId = null;
+    }
 
     if (state.stats.todayDate !== d) {
       state.stats.todayDate = d;
@@ -1021,6 +1032,11 @@
       row.append(info, right);
       projectList.appendChild(row);
     });
+    if (!state.activeProjectId) {
+      const activeDot = document.getElementById('activeProjectDot');
+      if (activeDot) activeDot.style.background = 'transparent';
+      if (activeProjectSel) activeProjectSel.value = '';
+    }
   }
 
   function render() {
@@ -1138,34 +1154,26 @@
   }
 
   function deleteProject(id) {
-    const row = document.querySelector(`[data-id="${id}"]`)?.closest('.row');
-    if (row) {
-      row.style.transition = 'opacity .3s';
-      row.style.opacity = 0;
-      setTimeout(() => {
-        state.projects = state.projects.filter((p) => p.id !== id);
-        delete state.stats.project[id];
-        if (state.activeProjectId === id) state.activeProjectId = 'default';
-        if (chartProjectSel && chartProjectSel.value === id)
-          chartProjectSel.value = '__all__';
-        save();
-        renderProjectsUI();
-        renderChart();
-      }, 300);
-    } else {
-      state.projects = state.projects.filter((p) => p.id !== id);
-      delete state.stats.project[id];
-      if (state.activeProjectId === id) {
-        const next = state.projects.find((p) => p.id !== id);
-        state.activeProjectId = next ? next.id : null;
-      }
+    // удалить из массива проектов
+    state.projects = state.projects.filter((p) => p.id !== id);
 
-      if (chartProjectSel && chartProjectSel.value === id)
-        chartProjectSel.value = '__all__';
-      save();
-      renderProjectsUI();
-      renderChart();
+    // удалить локальную статистику этого проекта
+    if (state.stats?.project) {
+      delete state.stats.project[id];
     }
+
+    // если удалили активный — выбрать следующий или null
+    if (state.activeProjectId === id) {
+      const next = state.projects[0]?.id || null;
+      state.activeProjectId = next;
+    }
+
+    // если проектов больше нет — ничего не создаём автоматически
+    save();
+    renderProjectsUI();
+    renderChart();
+    renderKPIs();
+    showToast('Проект удалён');
   }
 
   saveSettingsBtn.onclick = () => {
@@ -1541,14 +1549,26 @@
   }
 
   if (projectList) {
-    projectList.addEventListener('click', (e) => {
+    projectList.addEventListener('click', async (e) => {
       const btn = e.target.closest('button');
       if (!btn) return;
-      const action = btn.dataset.action,
-        id = btn.dataset.id;
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+
       if (action === 'delete') {
-        deleteProject(id);
-        return;
+        // Никаких confirm() — просто удаляем
+        try {
+          await deleteProjectFromCloud(id);
+        } catch (err) {
+          console.warn('cloud delete project failed', err);
+        }
+        try {
+          await deleteProjectStatsFromCloud(id);
+        } catch (err) {
+          console.warn('cloud delete stats failed', err);
+        }
+
+        deleteProject(id); // локально
       }
     });
   }

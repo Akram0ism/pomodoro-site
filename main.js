@@ -1677,7 +1677,20 @@ document.addEventListener('DOMContentLoaded', () => {
     },
   ];
 
-  helpBtn.addEventListener('click', () => startTour(steps));
+ helpBtn.addEventListener('click', (e) => {
+    e.stopPropagation(); // не даём всплыть до #topbar/#authIcon
+    startTour(steps);  });
+
+  // Дополнительно: горячая клавиша «?»
+  window.addEventListener('keydown', (e) => {
+    const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(
+      document.activeElement.tagName
+    );
+    if (!isInput && (e.key === '?' || (e.shiftKey && e.key === '/'))) {
+      e.preventDefault();
+      startTour(steps);
+    }
+  });
 
   function startTour(steps) {
     let i = 0;

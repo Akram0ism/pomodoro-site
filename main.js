@@ -2,6 +2,9 @@
   // ===== Cross-tab/state sync для PiP =====
   const bc = new BroadcastChannel('pomodoro-sync');
   let pipWindow = null;
+  // ВЫКЛЮЧАЕМ плавающий оверлей-виджет внутри страницы
+  const OVERLAY_ENABLED = false; // сейчас оверлей не показываем без нужды
+  const USE_OVERLAY_ONLY = !('documentPictureInPicture' in window); // Safari/Firefox → только оверлей
 
   // src/main.js
 
@@ -486,11 +489,18 @@
     },
     {
       id: 'long',
-      label: 'Длинный',
+      label: 'Длинный перерыв',
       get secs() {
         return state.settings.long * 60;
       },
     },
+    {
+      id: 'intense',
+      label: 'Интенсив',
+      get secs() {
+        return 0;
+      },
+    }, // спец. режим
   ];
 
   function renderTabs() {
@@ -509,7 +519,15 @@
 
   function switchMode(id, manual = false) {
     state.mode = id;
-    state.remaining = MODES.find((m) => m.id === id).secs;
+
+    if (id === 'intense') {
+      state.remaining = 0; // для интенсивного: elapsed в секундах
+      state.running = false;
+    } else {
+      state.remaining = MODES.find((m) => m.id === id).secs;
+      state.running = false;
+    }
+
     state.running = false;
     state._committed = false;
     startBtn.textContent = 'Старт';
@@ -530,25 +548,27 @@
     if (!lastTick) lastTick = ts;
     const dt = (ts - lastTick) / 1000;
     lastTick = ts;
-    state.remaining -= dt;
-    if (state.remaining <= 0) {
-      state.remaining = 0;
-      state.running = false;
-      try {
-        onTimerEnd();
-      } catch (e) {
-        console.error('onTimerEnd error:', e);
+
+    if (state.mode === 'intense') {
+      // секундомер: считаем вверх
+      state.remaining += dt;
+    } else {
+      // обычные режимы: считаем вниз
+      state.remaining -= dt;
+      if (state.remaining <= 0) {
+        state.remaining = 0;
+        state.running = false;
+        try {
+          onTimerEnd();
+        } catch (e) {
+          console.error('onTimerEnd error:', e);
+        }
       }
     }
+
     renderTime();
     raf = requestAnimationFrame(tick);
   }
-
-  console.table({
-    https: location.protocol === 'https:',
-    topLevel: window.top === window,
-    hasAPI: 'documentPictureInPicture' in window,
-  });
 
   async function start() {
     getAC();
@@ -559,17 +579,20 @@
     broadcastState();
 
     try {
-      if (!pipWindow) {
-        pipWindow = await openPip();
-      }
-      if (!pipWindow && 'documentPictureInPicture' in window) {
-        pipWindow = await openPip();
+      if (USE_OVERLAY_ONLY) {
+        // Нет Document PiP → просто показываем оверлей
+        ensureOverlay();
+      } else {
+        // Chrome/Edge с поддержкой Document PiP
+        if (!pipWindow) {
+          pipWindow = await openPip();
+        }
+        // Если вдруг окно не открылось — резервный оверлей
+        if (!pipWindow) ensureOverlay();
       }
     } catch (e) {
-      console.error('PiP failed:', e);
-    } finally {
-      // если PiP так и не появился — включаем оверлей
-      if (!pipWindow) ensureOverlay();
+      console.error('PiP/Overlay init failed:', e);
+      ensureOverlay();
     }
   }
   // ===== Document Picture-in-Picture =====
@@ -626,7 +649,11 @@
           ? 'Фокус'
           : payload.mode === 'short'
           ? 'Перерыв'
-          : 'Длинный';
+          : payload.mode === 'long'
+          ? 'Длинный'
+          : payload.mode === 'intense'
+          ? 'Интенсив'
+          : '—';
     }
 
     // сразу показать начальные данные
@@ -640,6 +667,7 @@
   }
 
   function onTimerEnd() {
+    if (state.mode === 'intense') return;
     statusEl.textContent = 'Готов';
     notify('Время вышло', labelFor(state.mode));
     if (state.settings.soundOn) beep();
@@ -888,8 +916,13 @@
     kpiTotal.textContent = `${state.stats.totalFocusMin} мин`;
   }
   function renderRound() {
+    if (state.mode === 'intense') {
+      roundInfo.textContent = `Интенсивный режим`;
+      return;
+    }
     roundInfo.textContent = `Раунд ${state.rounds}/${state.settings.roundsToLong}`;
   }
+
   function renderTasks() {
     taskList.innerHTML = '';
     state.tasks.forEach((t) => {
@@ -1040,25 +1073,21 @@
   }
 
   function render() {
-    focusMins.value = state.settings.focus;
-    shortMins.value = state.settings.short;
-    longMins.value = state.settings.long;
-    roundsToLong.value = state.settings.roundsToLong;
-    autoNext.checked = state.settings.autoNext;
-    soundOn.checked = state.settings.soundOn;
-    notifyOn.checked = state.settings.notifyOn;
+    if (focusMins) focusMins.value = state.settings.focus;
+    if (shortMins) shortMins.value = state.settings.short;
+    if (longMins) longMins.value = state.settings.long;
+    if (roundsToLong) roundsToLong.value = state.settings.roundsToLong;
+
+    if (autoNext) autoNext.checked = state.settings.autoNext;
+    if (soundOn) soundOn.checked = state.settings.soundOn;
+    if (notifyOn) notifyOn.checked = state.settings.notifyOn;
+
     if (soundVolume) {
       soundVolume.value = Math.round(state.settings.soundVolume * 100);
       if (soundVolumeVal) soundVolumeVal.textContent = soundVolume.value;
-    }
-    if (soundVolume) {
       soundVolume.addEventListener('input', () => {
         if (soundVolumeVal) soundVolumeVal.textContent = soundVolume.value;
-      });
-      soundVolume.addEventListener('input', () => {
-        if (soundVolumeVal) soundVolumeVal.textContent = soundVolume.value;
-        const percent = soundVolume.value + '%';
-        soundVolume.style.setProperty('--pos', percent);
+        soundVolume.style.setProperty('--pos', soundVolume.value + '%');
       });
     }
 
@@ -1071,15 +1100,46 @@
   }
 
   // ===== Events
-  startBtn.onclick = () => (state.running ? pause() : start());
-  skipBtn.onclick = () => {
-    state._skipped = true;
-    state.remaining = 0.01;
-    save();
+  startBtn.onclick = () => {
+    if (state.mode === 'intense') {
+      // В интенсиве "Старт" -> запускает, повторное нажатие не ставит паузу
+      if (!state.running) start();
+      else {
+        // Ничего не делаем, чтобы не было паузы.
+        showToast(
+          'В интенсивном режиме пауза отключена. Нажмите «Засчитать» для фиксации.'
+        );
+      }
+    } else {
+      state.running ? pause() : start();
+    }
   };
+
   // ===== Commit (зачесть минуты и СБРОСИТЬ таймер) =====
   commitBtn.onclick = () => {
-    // засчитываем только в режиме фокуса
+    if (state.mode === 'intense') {
+      const elapsedMin = Math.max(0, Math.round(state.remaining / 60));
+      if (elapsedMin <= 0) return showToast('Пока нечего засчитывать.');
+
+      addFocusMinutes(elapsedMin, state.activeProjectId);
+      showToast(`Засчитано: ${elapsedMin} мин`);
+
+      state.running = false;
+      state._skipped = false;
+      state._committed = false;
+      state.remaining = 0;
+
+      startBtn.textContent = 'Старт';
+      statusEl.textContent = 'Готов';
+
+      save();
+      renderTime();
+      renderKPIs();
+      renderChart();
+      return;
+    }
+
+    // === дальше твоя прежняя логика для 'focus' ===
     if (state.mode !== 'focus') {
       showToast('Можно засчитать только в режиме «Фокус».');
       return;
@@ -1087,21 +1147,16 @@
 
     const base = MODES.find((m) => m.id === 'focus').secs;
     const elapsedMin = Math.max(0, Math.round((base - state.remaining) / 60));
+    if (elapsedMin <= 0) return showToast('Пока нечего засчитывать.');
 
-    if (elapsedMin <= 0) {
-      showToast('Пока нечего засчитывать.');
-      return;
-    }
-
-    // записываем время
     addFocusMinutes(elapsedMin, state.activeProjectId);
     showToast(`Засчитано: ${elapsedMin} мин`);
 
-    // СБРОС СЕССИИ: останавливаем и возвращаем таймер к началу текущего режима
     state.running = false;
     state._skipped = false;
-    state._committed = false; // больше не блокируем повторное нажатие — elapsed станет 0
-    state.remaining = MODES.find((m) => m.id === state.mode).secs; // для 'focus' это полный цикл
+    state._committed = false;
+    state.remaining = base;
+
     startBtn.textContent = 'Старт';
     statusEl.textContent = 'Готов';
 
@@ -1110,6 +1165,8 @@
     renderKPIs();
     renderChart();
   };
+
+  // засчитываем только в режиме фокуса
 
   activeProjectSel.onchange = () => {
     state.activeProjectId = activeProjectSel.value;
@@ -1177,31 +1234,25 @@
   }
 
   saveSettingsBtn.onclick = () => {
-    const f = sanitizeNumber(focusMins.value, {
-      min: 1,
-      max: 300,
-      fallback: 25,
-    });
-    const s = sanitizeNumber(shortMins.value, {
-      min: 1,
-      max: 120,
-      fallback: 5,
-    });
-    const l = sanitizeNumber(longMins.value, {
-      min: 1,
-      max: 240,
-      fallback: 15,
-    });
-    const r = sanitizeNumber(roundsToLong.value, {
-      min: 2,
-      max: 12,
-      fallback: 4,
-    });
-    const volPercent = sanitizeNumber(soundVolume?.value ?? 80, {
-      min: 0,
-      max: 100,
-      fallback: 80,
-    });
+    const f = focusMins
+      ? sanitizeNumber(focusMins.value, { min: 1, max: 300, fallback: 25 })
+      : state.settings.focus;
+    const s = shortMins
+      ? sanitizeNumber(shortMins.value, { min: 1, max: 120, fallback: 5 })
+      : state.settings.short;
+    const l = longMins
+      ? sanitizeNumber(longMins.value, { min: 1, max: 240, fallback: 15 })
+      : state.settings.long;
+    const r = roundsToLong
+      ? sanitizeNumber(roundsToLong.value, { min: 2, max: 12, fallback: 4 })
+      : state.settings.roundsToLong;
+    const volPercent = soundVolume
+      ? sanitizeNumber(soundVolume.value ?? 80, {
+          min: 0,
+          max: 100,
+          fallback: 80,
+        })
+      : Math.round((state.settings.soundVolume ?? 0.8) * 100);
     const vol = volPercent / 100;
 
     state.settings = {
@@ -1209,14 +1260,16 @@
       short: s,
       long: l,
       roundsToLong: r,
-      autoNext: autoNext.checked,
-      soundOn: soundOn.checked,
-      notifyOn: notifyOn.checked,
+      autoNext: !!(autoNext && autoNext.checked),
+      soundOn: !!(soundOn && soundOn.checked),
+      notifyOn: !!(notifyOn && notifyOn.checked),
       soundVolume: vol,
     };
+
     if (state.mode === 'focus') state.remaining = f * 60;
     if (state.mode === 'short') state.remaining = s * 60;
     if (state.mode === 'long') state.remaining = l * 60;
+
     statusEl.textContent = 'Сохранено';
     save();
     renderTime();
@@ -1293,6 +1346,10 @@
     }
     if (e.key === '3') {
       switchMode('long', true);
+      renderTabs();
+    }
+    if (e.key === '4') {
+      switchMode('intense', true);
       renderTabs();
     }
   });
@@ -1572,6 +1629,17 @@
       }
     });
   }
+  async function deleteProjectStatsFromCloud(projectId) {
+    if (!supa) return;
+    const u = (await supa.auth.getUser()).data.user;
+    if (!u) return;
+    // удалим все записи stats_by_day по этому проекту
+    await supa
+      .from('stats_by_day')
+      .delete()
+      .eq('user_id', u.id)
+      .eq('project_id', projectId);
+  }
 
   // ===== Self-tests (quick regression)
   (() => {
@@ -1605,136 +1673,136 @@
   render();
   renderChart('week');
   requestAnimationFrame(tick);
-})();
 
-function setupConsent(clientIdForAdSense) {
-  const banner = document.getElementById('cookieBanner');
-  const accept = document.getElementById('cookieAccept');
-  const decline = document.getElementById('cookieDecline');
-  const key = 'consent.ads';
+  function setupConsent(clientIdForAdSense) {
+    const banner = document.getElementById('cookieBanner');
+    const accept = document.getElementById('cookieAccept');
+    const decline = document.getElementById('cookieDecline');
+    const key = 'consent.ads';
 
-  const saved = localStorage.getItem(key);
-  if (saved === null) {
-    banner.style.display = 'block';
-  } else if (saved === 'yes' && clientIdForAdSense) {
-    loadAdSense(clientIdForAdSense);
+    const saved = localStorage.getItem(key);
+    if (saved === null) {
+      banner.style.display = 'block';
+    } else if (saved === 'yes' && clientIdForAdSense) {
+      loadAdSense(clientIdForAdSense);
+    }
+
+    accept?.addEventListener('click', () => {
+      localStorage.setItem(key, 'yes');
+      banner.style.display = 'none';
+      if (clientIdForAdSense) loadAdSense(clientIdForAdSense);
+    });
+    decline?.addEventListener('click', () => {
+      localStorage.setItem(key, 'no');
+      banner.style.display = 'none';
+    });
   }
 
-  accept?.addEventListener('click', () => {
-    localStorage.setItem(key, 'yes');
-    banner.style.display = 'none';
-    if (clientIdForAdSense) loadAdSense(clientIdForAdSense);
+  // вызови после DOMContentLoaded:
+  document.addEventListener('DOMContentLoaded', () => {
+    // Если используешь AdSense — передай свой clientId:
+    setupConsent('ca-pub-4263398644681945');
+    // Если не используешь AdSense — передай null:
+    // setupConsent(null);
   });
-  decline?.addEventListener('click', () => {
-    localStorage.setItem(key, 'no');
-    banner.style.display = 'none';
-  });
-}
 
-// вызови после DOMContentLoaded:
-document.addEventListener('DOMContentLoaded', () => {
-  // Если используешь AdSense — передай свой clientId:
-  setupConsent('ca-pub-4263398644681945');
-  // Если не используешь AdSense — передай null:
-  // setupConsent(null);
-});
+  // ===== Mini Tour (подсказка навигации) =====
+  (function setupMiniTour() {
+    const helpBtn = document.getElementById('helpBtn');
+    if (!helpBtn) return;
 
-// ===== Mini Tour (подсказка навигации) =====
-(function setupMiniTour() {
-  const helpBtn = document.getElementById('helpBtn');
-  if (!helpBtn) return;
+    const steps = [
+      {
+        sel: '#modeTabs',
+        title: 'Режимы',
+        text: 'Переключайся между «Фокус», «Перерыв» и «Длинный».',
+        place: 'bottom',
+      },
+      {
+        sel: '#time',
+        title: 'Таймер',
+        text: 'Здесь идёт обратный отсчёт. Space — старт/пауза.',
+        place: 'right',
+      },
+      {
+        sel: '#startPause',
+        title: 'Старт/Пауза',
+        text: 'Запускай сессию, останавливай, или засчитывай минутки кнопкой «Зачесть».',
+        place: 'top',
+      },
+      {
+        sel: '#projectList',
+        title: 'Проекты',
+        text: 'Веди учёт фокус-минут по проектам и меняй цвета.',
+        place: 'left',
+      },
+      {
+        sel: '#focusChart',
+        title: 'Статистика',
+        text: 'Смотри прогресс по дням/неделям, фильтруй по проектам.',
+        place: 'top',
+      },
+    ];
 
-  const steps = [
-    {
-      sel: '#modeTabs',
-      title: 'Режимы',
-      text: 'Переключайся между «Фокус», «Перерыв» и «Длинный».',
-      place: 'bottom',
-    },
-    {
-      sel: '#time',
-      title: 'Таймер',
-      text: 'Здесь идёт обратный отсчёт. Space — старт/пауза.',
-      place: 'right',
-    },
-    {
-      sel: '#startPause',
-      title: 'Старт/Пауза',
-      text: 'Запускай сессию, останавливай, или засчитывай минутки кнопкой «Зачесть».',
-      place: 'top',
-    },
-    {
-      sel: '#projectList',
-      title: 'Проекты',
-      text: 'Веди учёт фокус-минут по проектам и меняй цвета.',
-      place: 'left',
-    },
-    {
-      sel: '#focusChart',
-      title: 'Статистика',
-      text: 'Смотри прогресс по дням/неделям, фильтруй по проектам.',
-      place: 'top',
-    },
-  ];
-
- helpBtn.addEventListener('click', (e) => {
-    e.stopPropagation(); // не даём всплыть до #topbar/#authIcon
-    startTour(steps);  });
-
-  // Дополнительно: горячая клавиша «?»
-  window.addEventListener('keydown', (e) => {
-    const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(
-      document.activeElement.tagName
-    );
-    if (!isInput && (e.key === '?' || (e.shiftKey && e.key === '/'))) {
-      e.preventDefault();
+    helpBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // не даём всплыть до #topbar/#authIcon
       startTour(steps);
-    }
-  });
+    });
 
-  function startTour(steps) {
-    let i = 0;
-    const overlay = document.createElement('div');
-    overlay.className = 'tour-overlay';
-    overlay.addEventListener('click', () => end(true));
-    document.body.appendChild(overlay);
-
-    const ring = document.createElement('div');
-    ring.className = 'tour-focus-ring';
-    document.body.appendChild(ring);
-
-    const tip = document.createElement('div');
-    tip.className = 'tour-tip';
-    document.body.appendChild(tip);
-
-    let autoTimer = null;
-
-    function go(n) {
-      clearTimeout(autoTimer);
-      i = n;
-      if (i < 0 || i >= steps.length) {
-        end();
-        return;
+    // Дополнительно: горячая клавиша «?»
+    window.addEventListener('keydown', (e) => {
+      const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(
+        document.activeElement.tagName
+      );
+      if (!isInput && (e.key === '?' || (e.shiftKey && e.key === '/'))) {
+        e.preventDefault();
+        startTour(steps);
       }
+    });
 
-      const step = steps[i];
-      const el = document.querySelector(step.sel);
-      if (!el) {
-        next();
-        return;
-      }
+    function startTour(steps) {
+      let i = 0;
+      const overlay = document.createElement('div');
+      overlay.className = 'tour-overlay';
+      overlay.addEventListener('click', () => end(true));
+      document.body.appendChild(overlay);
 
-      // позиция и размеры цели
-      const r = el.getBoundingClientRect();
-      const pad = 6;
-      ring.style.left = r.left - pad + 'px';
-      ring.style.top = r.top - pad + 'px';
-      ring.style.width = r.width + pad * 2 + 'px';
-      ring.style.height = r.height + pad * 2 + 'px';
+      const ring = document.createElement('div');
+      ring.className = 'tour-focus-ring';
+      document.body.appendChild(ring);
 
-      // контент подсказки
-      // контент подсказки без кнопки "Пропустить"
-      tip.innerHTML = `
+      const tip = document.createElement('div');
+      tip.className = 'tour-tip';
+      document.body.appendChild(tip);
+
+      let autoTimer = null;
+
+      function go(n) {
+        clearTimeout(autoTimer);
+        i = n;
+        if (i < 0 || i >= steps.length) {
+          end();
+          return;
+        }
+
+        const step = steps[i];
+        const el = document.querySelector(step.sel);
+        if (!el) {
+          next();
+          return;
+        }
+
+        // позиция и размеры цели
+        const r = el.getBoundingClientRect();
+        const pad = 6;
+        ring.style.left = r.left - pad + 'px';
+        ring.style.top = r.top - pad + 'px';
+        ring.style.width = r.width + pad * 2 + 'px';
+        ring.style.height = r.height + pad * 2 + 'px';
+
+        // контент подсказки
+        // контент подсказки без кнопки "Пропустить"
+        tip.innerHTML = `
 <h4>${step.title}</h4>
 <div>${step.text}</div>
 <div class="tour-controls">
@@ -1745,97 +1813,101 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 `;
 
-      // позиционирование подсказки
-      const tw = Math.min(320, Math.max(220, r.width));
-      tip.style.width = tw + 'px';
-      const gap = 10;
-      let x = r.left,
-        y = r.top;
+        // позиционирование подсказки
+        const tw = Math.min(320, Math.max(220, r.width));
+        tip.style.width = tw + 'px';
+        const gap = 10;
+        let x = r.left,
+          y = r.top;
 
-      switch (step.place) {
-        case 'bottom':
-          x = r.left;
-          y = r.bottom + gap;
-          break;
-        case 'top':
-          x = r.left;
-          y = r.top - tip.offsetHeight - gap;
-          break;
-        case 'left':
-          x = r.left - tw - gap;
-          y = r.top;
-          break;
-        default:
-          x = r.right + gap;
-          y = r.top;
-          break; // right
+        switch (step.place) {
+          case 'bottom':
+            x = r.left;
+            y = r.bottom + gap;
+            break;
+          case 'top':
+            x = r.left;
+            y = r.top - tip.offsetHeight - gap;
+            break;
+          case 'left':
+            x = r.left - tw - gap;
+            y = r.top;
+            break;
+          default:
+            x = r.right + gap;
+            y = r.top;
+            break; // right
+        }
+        // не вылезаем за экран
+        x = Math.max(12, Math.min(x, window.innerWidth - tw - 12));
+        y = Math.max(
+          12,
+          Math.min(y, window.innerHeight - tip.offsetHeight - 12)
+        );
+        tip.style.left = x + 'px';
+        tip.style.top = y + 'px';
+
+        // кнопки
+        tip.querySelector('#tourPrev')?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          go(i - 1);
+        });
+        tip.querySelector('#tourNext')?.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          go(i + 1);
+        });
+
+        // авто-переход через 3.5 сек, если юзер не кликает
+        autoTimer = setTimeout(() => go(i + 1), 3500);
       }
-      // не вылезаем за экран
-      x = Math.max(12, Math.min(x, window.innerWidth - tw - 12));
-      y = Math.max(12, Math.min(y, window.innerHeight - tip.offsetHeight - 12));
-      tip.style.left = x + 'px';
-      tip.style.top = y + 'px';
 
-      // кнопки
-      tip.querySelector('#tourPrev')?.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        go(i - 1);
-      });
-      tip.querySelector('#tourNext')?.addEventListener('click', (ev) => {
-        ev.stopPropagation();
+      function next() {
         go(i + 1);
-      });
+      }
+      function end(skipped) {
+        clearTimeout(autoTimer);
+        overlay.remove();
+        ring.remove();
+        tip.remove();
+        if (!skipped) showToast('Подсказка завершена');
+      }
 
-      // авто-переход через 3.5 сек, если юзер не кликает
-      autoTimer = setTimeout(() => go(i + 1), 3500);
+      // перестановка при ресайзе/прокрутке
+      const onRelayout = () => go(i);
+      window.addEventListener('resize', onRelayout);
+      window.addEventListener('scroll', onRelayout, true);
+      const origEnd = end;
+      end = function (skipped) {
+        // обёртка, чтобы снять слушатели
+        window.removeEventListener('resize', onRelayout);
+        window.removeEventListener('scroll', onRelayout, true);
+        origEnd(skipped);
+      };
+
+      go(0);
     }
 
-    function next() {
-      go(i + 1);
-    }
-    function end(skipped) {
-      clearTimeout(autoTimer);
-      overlay.remove();
-      ring.remove();
-      tip.remove();
-      if (!skipped) showToast('Подсказка завершена');
-    }
+    function loadAdSense(clientId) {
+      const s = document.createElement('script');
+      s.async = true;
+      s.src =
+        'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' +
+        encodeURIComponent(clientId);
+      s.crossOrigin = 'anonymous';
+      document.head.appendChild(s);
 
-    // перестановка при ресайзе/прокрутке
-    const onRelayout = () => go(i);
-    window.addEventListener('resize', onRelayout);
-    window.addEventListener('scroll', onRelayout, true);
-    const origEnd = end;
-    end = function (skipped) {
-      // обёртка, чтобы снять слушатели
-      window.removeEventListener('resize', onRelayout);
-      window.removeEventListener('scroll', onRelayout, true);
-      origEnd(skipped);
-    };
-
-    go(0);
-  }
-
-  function loadAdSense(clientId) {
-    const s = document.createElement('script');
-    s.async = true;
-    s.src =
-      'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' +
-      encodeURIComponent(clientId);
-    s.crossOrigin = 'anonymous';
-    document.head.appendChild(s);
-
-    // Пример блока AdSense в рельсе:
-    const right = document.getElementById('adRight');
-    if (right) {
-      right.innerHTML = `
+      // Пример блока AdSense в рельсе:
+      const right = document.getElementById('adRight');
+      if (right) {
+        right.innerHTML = `
         <ins class="adsbygoogle"
              style="display:block"
              data-ad-client= "ca - pub - 4263398644681945"
              data-ad-slot="9510004602"
              data-ad-format="rectangle"
              data-full-width-responsive="true"></ins>`;
-      (window.adsbygoogle = window.adsbygoogle || []).push({});
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+      }
     }
-  }
+  })();
 })();

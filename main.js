@@ -1,40 +1,92 @@
 (() => {
   // ===== Cross-tab/state sync для PiP =====
-  const bc = new BroadcastChannel('pomodoro-sync');
+  // ===== Cross-tab/state sync для PiP =====
+  let bc;
+  try {
+    bc =
+      typeof BroadcastChannel !== 'undefined'
+        ? new BroadcastChannel('pomodoro-sync')
+        : null;
+  } catch (_) {
+    bc = null;
+  }
+  // простой no-op, чтобы вызовы не падали
+  const BC = {
+    postMessage: (...args) => {
+      try {
+        bc?.postMessage?.(...args);
+      } catch {}
+    },
+    // подписка через bc.onmessage уже ниже — оставим как есть, но защитим:
+  };
   let pipWindow = null;
-  // ВЫКЛЮЧАЕМ плавающий оверлей-виджет внутри страницы
-  const OVERLAY_ENABLED = false; // сейчас оверлей не показываем без нужды
-  const USE_OVERLAY_ONLY = !('documentPictureInPicture' in window); // Safari/Firefox → только оверлей
+
+  // Safari/Firefox: нет Document PiP → используем оверлей
+  const USE_OVERLAY_ONLY = !('documentPictureInPicture' in window);
+  // Разрешаем оверлей (оставь true, чтобы можно было вызвать вручную везде)
+  const OVERLAY_ENABLED = true;
 
   // src/main.js
-
+  let mirror = null;
   // Отправка текущего состояния в канал
-  function broadcastState() {
-    bc.postMessage({
-      type: 'state',
-      payload: {
-        remaining: state.remaining,
-        mode: state.mode,
-        running: state.running,
-      },
-    });
+
+  const BUS_KEY = 'pomodoro-sync-msg';
+
+  function busPost(msg) {
+    // основной путь — BroadcastChannel
+    try {
+      BC.postMessage(msg);
+    } catch {}
+    // фолбэк — через storage-событие
+    try {
+      localStorage.setItem(BUS_KEY, JSON.stringify({ t: Date.now(), msg }));
+    } catch {}
   }
 
-  bc.onmessage = (ev) => {
-    const msg = ev?.data;
+  window.addEventListener('storage', (e) => {
+    if (e.key === BUS_KEY && e.newValue) {
+      try {
+        const { msg } = JSON.parse(e.newValue);
+        handleBusMessage(msg);
+      } catch {}
+    }
+  });
+
+  function broadcastState() {
+    try {
+      BC.postMessage({
+        type: 'state',
+        payload: {
+          remaining: state.remaining,
+          mode: state.mode,
+          running: state.running,
+        },
+      });
+    } catch {}
+  }
+  function handleBusMessage(msg) {
     if (!msg || typeof msg !== 'object') return;
+
+    if (msg.type === 'state' && msg.payload) {
+      mirror = msg.payload;
+      if (USE_OVERLAY_ONLY && OVERLAY_ENABLED && !overlayEl) ensureOverlay();
+      updateOverlay(mirror);
+      return;
+    }
 
     if (msg.type === 'cmd') {
       const act = msg.action;
       if (act === 'toggle') return state.running ? pause() : start();
-
       if (act === 'switch' && ['focus', 'short', 'long'].includes(msg.mode)) {
         switchMode(msg.mode, true);
         return;
       }
     }
-    // игнор всё остальное
-  };
+  }
+
+  if (bc) {
+    bc.onmessage = (ev) => handleBusMessage(ev?.data);
+  }
 
   const SUPABASE_URL = window.SUPABASE_URL;
   const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
@@ -150,7 +202,21 @@
     // безопасно вставить текст (без innerHTML)
     parent.textContent = String(text ?? '');
   }
+  document.addEventListener('DOMContentLoaded', () => {
+    if (USE_OVERLAY_ONLY && OVERLAY_ENABLED && !overlayEl) {
+      // лёгкая задержка, чтобы точно был body
+      setTimeout(() => {
+        try {
+          ensureOverlay();
+          updateOverlay();
+        } catch {}
+      }, 0);
+    }
+  });
 
+  document.getElementById('forceOverlayBtn')?.addEventListener('click', () => {
+    if (OVERLAY_ENABLED) ensureOverlay();
+  });
   // toast уведомление
   function ensureToastEl() {
     let el = document.getElementById('toast');
@@ -580,19 +646,18 @@
 
     try {
       if (USE_OVERLAY_ONLY) {
-        // Нет Document PiP → просто показываем оверлей
-        ensureOverlay();
+        if (OVERLAY_ENABLED) ensureOverlay();
       } else {
         // Chrome/Edge с поддержкой Document PiP
         if (!pipWindow) {
           pipWindow = await openPip();
         }
         // Если вдруг окно не открылось — резервный оверлей
-        if (!pipWindow) ensureOverlay();
+        if (!pipWindow && OVERLAY_ENABLED) ensureOverlay();
       }
     } catch (e) {
       console.error('PiP/Overlay init failed:', e);
-      ensureOverlay();
+      if (OVERLAY_ENABLED) ensureOverlay();
     }
   }
   // ===== Document Picture-in-Picture =====
@@ -741,6 +806,12 @@
       updateOverlay();
       return;
     }
+    if (!document.body) {
+      document.addEventListener('DOMContentLoaded', ensureOverlay, {
+        once: true,
+      });
+      return;
+    }
 
     // удаляем старый (если залипший)
     document.querySelector('#pomodoroOverlay')?.remove();
@@ -748,12 +819,14 @@
     overlayEl = document.createElement('div');
     overlayEl.id = 'pomodoroOverlay';
     overlayEl.style.cssText = `
-    position:fixed; right:16px; bottom:16px; z-index:9999;
+    position:fixed; right:16px; bottom:16px;
+    z-index:2147483647; /* было 9999 */
     background:#121a33; color:#e2e8f0; border:1px solid rgba(255,255,255,.12);
     border-radius:12px; padding:10px 12px; width:180px;
     box-shadow:0 10px 30px rgba(0,0,0,.35);
     font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
   `;
+
     overlayEl.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
       <strong id="ovStatus" style="font-size:13px">Фокус</strong>
@@ -784,43 +857,51 @@
       overlayEl = null;
     });
     q('#ovToggle')?.addEventListener('click', () => {
-      state.running ? pause() : start();
-      updateOverlay();
+      busPost({ type: 'cmd', action: 'toggle' });
     });
+
     q('#ovFocus')?.addEventListener('click', () => {
-      switchMode('focus', true);
-      updateOverlay();
+      busPost({ type: 'cmd', action: 'switch', mode: 'focus' });
     });
+
     q('#ovShort')?.addEventListener('click', () => {
-      switchMode('short', true);
-      updateOverlay();
+      busPost({ type: 'cmd', action: 'switch', mode: 'short' });
     });
+
     q('#ovLong')?.addEventListener('click', () => {
-      switchMode('long', true);
-      updateOverlay();
+      busPost({ type: 'cmd', action: 'switch', mode: 'long' });
     });
 
     updateOverlay();
   }
 
-  function updateOverlay() {
+  function updateOverlay(payload) {
     if (!overlayEl) return;
     const timeNode = overlayEl.querySelector('#ovTime');
     const statusNode = overlayEl.querySelector('#ovStatus');
     const toggleNode = overlayEl.querySelector('#ovToggle');
     if (!timeNode || !statusNode || !toggleNode) return;
 
-    const secs = Math.ceil(state.remaining);
+    // если прилетел payload из другой вкладки — используем его, иначе свой state
+    const src = payload || mirror || state;
+
+    const secs = Math.max(0, Math.ceil(src.remaining ?? 0));
     const mm = String(Math.floor(secs / 60)).padStart(2, '0');
     const ss = String(secs % 60).padStart(2, '0');
     timeNode.textContent = `${mm}:${ss}`;
+
     statusNode.textContent =
-      state.mode === 'focus'
+      src.mode === 'focus'
         ? 'Фокус'
-        : state.mode === 'short'
+        : src.mode === 'short'
         ? 'Перерыв'
-        : 'Длинный';
-    toggleNode.textContent = state.running ? '⏸️' : '▶️';
+        : src.mode === 'long'
+        ? 'Длинный'
+        : src.mode === 'intense'
+        ? 'Интенсив'
+        : '—';
+
+    toggleNode.textContent = src.running ? '⏸️' : '▶️';
   }
 
   // ===== Pause (остановка таймера + закрытие PiP) =====
@@ -1330,7 +1411,19 @@
       return;
     if (e.code === 'Space') {
       e.preventDefault();
-      state.running ? pause() : start();
+      if (state.mode === 'intense') {
+        // В интенсиве пробел только запускает, без паузы
+        if (!state.running) start();
+        else
+          showToast(
+            'В интенсивном режиме пауза отключена. Нажмите «Засчитать».'
+          );
+      } else {
+        state.running ? pause() : start();
+      }
+    }
+    if (e.shiftKey && e.key.toLowerCase() === 'o') {
+      if (OVERLAY_ENABLED) ensureOverlay();
     }
     if (e.key === 'r' || e.key === 'R') {
       e.preventDefault();
@@ -1674,6 +1767,28 @@
   renderChart('week');
   requestAnimationFrame(tick);
 
+  function loadAdSense(clientId) {
+    const s = document.createElement('script');
+    s.async = true;
+    s.src =
+      'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' +
+      encodeURIComponent(clientId);
+    s.crossOrigin = 'anonymous';
+    document.head.appendChild(s);
+
+    const right = document.getElementById('adRight');
+    if (right) {
+      right.innerHTML = `
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client="ca-pub-4263398644681945"
+             data-ad-slot="9510004602"
+             data-ad-format="rectangle"
+             data-full-width-responsive="true"></ins>`;
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    }
+  }
+
   function setupConsent(clientIdForAdSense) {
     const banner = document.getElementById('cookieBanner');
     const accept = document.getElementById('cookieAccept');
@@ -1885,29 +2000,6 @@
       };
 
       go(0);
-    }
-
-    function loadAdSense(clientId) {
-      const s = document.createElement('script');
-      s.async = true;
-      s.src =
-        'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' +
-        encodeURIComponent(clientId);
-      s.crossOrigin = 'anonymous';
-      document.head.appendChild(s);
-
-      // Пример блока AdSense в рельсе:
-      const right = document.getElementById('adRight');
-      if (right) {
-        right.innerHTML = `
-        <ins class="adsbygoogle"
-             style="display:block"
-             data-ad-client= "ca - pub - 4263398644681945"
-             data-ad-slot="9510004602"
-             data-ad-format="rectangle"
-             data-full-width-responsive="true"></ins>`;
-        (window.adsbygoogle = window.adsbygoogle || []).push({});
-      }
     }
   })();
 })();

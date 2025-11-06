@@ -42,6 +42,47 @@ topbar-right {
   z-index: 9998;
 }
 
+
+
+/* Контейнер для иконок справа в топбаре */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative; /* чтобы меню навешивалось рядом */
+}
+
+/* Кнопка "?" на топбаре */
+.help-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: #0f1630;
+  color: #e2e8f0;
+  font-weight: 700;
+  line-height: 26px;
+  text-align: center;
+  cursor: pointer;
+}
+.help-btn:hover { background: #1a2344; }
+
+/* Если у тебя класс .pill уже есть — оставь как есть; если нет, добавь: */
+.c-ghost {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.2);
+  color: #e2e8f0;
+}
+
+/* Убедись, что меню всплывает поверх */
+#topbar { position: relative; }
+.auth-menu {
+  position: absolute;
+  right: 0;
+  top: 48px;
+  z-index: 1000;
+}
+
 /* подсказка */
 .tour-tip {
   position: fixed;

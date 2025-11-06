@@ -42,50 +42,40 @@
       <main class="content">
 
     <!-- ===== ВСТАВЬ СЮДА ВЕСЬ ТВОЙ КОНТЕНТ (header, контейнер, карточки и т.д.) ===== -->
-    <header id="topbar">
-      <div class="logo">Помодоро</div>
-      <div id="authIcon" class="auth-icon" title="Войти"></div>
-      <div id="authMenu" class="auth-menu hidden">
-        <div class="muted" id="authEmailDisplay" style="margin-bottom: 6px">
-          Не вошли
-        </div>
+    <header id="topbar">  
+  <div class="logo">Помодоро</div>
 
-        <div class="auth-row">
-          <input
-            id="authMenuEmail"
-            type="email"
-            placeholder="you@example.com"
-            autocomplete="email"
-          />
-        </div>
-       
-        
+  <!-- Обертка для кнопок в правой части топбара -->
+  <div class="topbar-actions">
+    <button id="helpBtn" class="help-btn" title="Подсказка по приложению">?</button>
+    <div id="authIcon" class="auth-icon" title="Войти"></div>
+  </div>
 
-        <div class="auth-row">
-          <input
-            id="authMenuPass"
-            type="password"
-            placeholder="Пароль"
-            autocomplete="current-password"
-          />
-        </div>
+  <div id="authMenu" class="auth-menu hidden">
+    <div class="muted" id="authEmailDisplay" style="margin-bottom: 6px">
+      Не вошли
+    </div>
 
-        <div class="auth-row">
-          <button id="authLoginBtn">Войти</button>
-          <button id="authSignupBtn" class="ghost">Регистрация</button>
-        </div>
+    <div class="auth-row">
+      <input id="authMenuEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+    </div>
 
-        <button id="authGoogleBtn" class="full">Войти через Google</button>
-        <button id="authLogoutBtn" class="full" style="display: none">
-          Выйти
-        </button>
-        <button id="helpBtn" class="help-btn" title="Показать подсказку">
-          ?
-        </button>
-      </div>
+    <div class="auth-row">
+      <input id="authMenuPass" type="password" placeholder="Пароль" autocomplete="current-password" />
+    </div>
 
-      <div id="authBackdrop" class="auth-backdrop hidden"></div>
-    </header>
+    <div class="auth-row">
+      <button id="authLoginBtn">Войти</button>
+      <button id="authSignupBtn" class="c-ghost">Регистрация</button>
+    </div>
+
+    <button id="authGoogleBtn" class="full">Войти через Google</button>
+    <button id="authLogoutBtn" class="full" style="display: none">Выйти</button>
+  </div>
+
+  <div id="authBackdrop" class="auth-backdrop hidden"></div>
+</header>
+
     <div class="container">
       <div class="card p24">
         <h1>Помодоро таймер</h1>
